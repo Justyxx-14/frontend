@@ -1,0 +1,5 @@
+@import "tailwindcss";
+
+* {
+  cursor: url('/cursor.webp'), pointer;
+}
