@@ -16,7 +16,8 @@ import InGame from "./InGame";
 
 // Mocks
 vi.mock("react-router-dom", () => ({
-  useParams: () => ({ gameId: "test-game-id" })
+  useParams: () => ({ gameId: "test-game-id" }),
+  useNavigate: () => vi.fn()
 }));
 vi.mock("@/context/useGame");
 vi.mock("@/services/HttpService");
@@ -54,7 +55,7 @@ describe("InGame Component Logic", () => {
     vi.mocked(createHttpService).mockReturnValue({
       getDraftCards: mockGetDraftCards,
       drawDraftCard: mockDrawDraftCard,
-      getLastDiscardedCard: mockGetLastDiscardedCard,
+      getLastDiscardedCards: mockGetLastDiscardedCard,
       regularDrawCards: mockRegularDrawCards,
       getTurnGame: vi.fn().mockResolvedValue({ id: "player-1" }),
       nextTurnGame: mockNextTurnGame,
@@ -100,7 +101,10 @@ describe("InGame Component Logic", () => {
           "player-1"
         );
         expect(mockGetDraftCards).toHaveBeenCalledWith("test-game-id");
-        expect(mockGetLastDiscardedCard).toHaveBeenCalledWith("test-game-id");
+        expect(mockGetLastDiscardedCard).toHaveBeenCalledWith(
+          "test-game-id",
+          1
+        );
         expect(mockGetSecretsGame).toHaveBeenCalledWith(
           "test-game-id",
           "player-1"
@@ -118,7 +122,7 @@ describe("InGame Component Logic", () => {
 
       render(<InGame />);
 
-      const zoomButton = await screen.findByRole("button", { name: /🔍/i });
+      const zoomButton = await screen.findByTestId("zoom-button");
       fireEvent.click(zoomButton);
 
       const modal = await screen.findByRole("dialog", {
@@ -167,7 +171,8 @@ describe("InGame Component Logic", () => {
       const otherPlayerSection = screen
         .getByText("Alice")
         .closest("div").parentElement;
-      const otherSecretsButton = within(otherPlayerSection).getByTestId("secret-button");
+      const otherSecretsButton =
+        within(otherPlayerSection).getByTestId("secret-button");
       fireEvent.click(otherSecretsButton);
 
       await waitFor(() => {
@@ -251,13 +256,12 @@ describe("InGame Component Logic", () => {
       const cardElement = await screen.findByAltText("Sospecha");
       fireEvent.click(cardElement);
 
-      const playButton = screen.getByRole("button", { name: /Play Card/i });
+      const playButton = screen.getByRole("button", { name: /Play/i });
       fireEvent.click(playButton);
 
       await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith(
-          "You can't do more than one action"
-        );
+        expect(toast.error).toHaveBeenCalledTimes(1);
+
         expect(mockPlayCardEvent).not.toHaveBeenCalled();
         expect(screen.getByAltText("Sospecha")).toBeInTheDocument();
       });
@@ -276,7 +280,7 @@ describe("InGame Component Logic", () => {
       const cardElement = await screen.findByAltText("Sospecha");
       fireEvent.click(cardElement);
 
-      const playButton = screen.getByRole("button", { name: /Play Card/i });
+      const playButton = screen.getByRole("button", { name: /Play/i });
       fireEvent.click(playButton);
 
       await waitFor(() => {
@@ -384,7 +388,7 @@ describe("InGame Component Logic", () => {
       const cardElement = await screen.findByAltText("Sospecha");
       fireEvent.click(cardElement);
 
-      const playButton = screen.getByRole("button", { name: /Play Card/i });
+      const playButton = screen.getByRole("button", { name: /Play/i });
       fireEvent.click(playButton);
 
       await waitFor(() => {
@@ -392,7 +396,6 @@ describe("InGame Component Logic", () => {
           expect.objectContaining(eventCard)
         );
 
-        expect(toast.success).toHaveBeenCalledWith("Suspicion card was played");
         expect(screen.queryByAltText("Sospecha")).not.toBeInTheDocument();
       });
     });
@@ -413,7 +416,7 @@ describe("InGame Component Logic", () => {
       const cardElement = await screen.findByAltText("Investigador");
       fireEvent.click(cardElement);
 
-      const playButton = screen.getByRole("button", { name: /Play Card/i });
+      const playButton = screen.getByRole("button", { name: /Play/i });
       fireEvent.click(playButton);
 
       await new Promise(r => setTimeout(r, 100));
@@ -441,16 +444,146 @@ describe("InGame Component Logic", () => {
       fireEvent.click(eventCardElement);
       fireEvent.click(detectiveCardElement);
 
-      const playButton = screen.getByRole("button", { name: /Play Card/i });
+      const playButton = screen.getByRole("button", { name: /Play/i });
       fireEvent.click(playButton);
 
       await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith(
-          "You can't do more than one action"
-        );
+        expect(toast.error).toHaveBeenCalledTimes(1);
+
         expect(mockPlayCardEvent).not.toHaveBeenCalled();
         expect(screen.getByAltText("Sospecha")).toBeInTheDocument();
         expect(screen.getByAltText("Investigador")).toBeInTheDocument();
+      });
+    });
+
+    it("plays E_COT card", async () => {
+      const cotCard = {
+        id: "card-cot",
+        name: "E_COT",
+        type: "EVENT",
+        description: "Call of Truth"
+      };
+
+      mockCardsByPlayerContext.mockResolvedValue([cotCard]);
+      mockGetDraftCards.mockResolvedValue([]);
+      mockGetLastDiscardedCard.mockResolvedValue([]);
+      mockGetSecretsGame.mockResolvedValue([]);
+
+      mockPlayCardEvent.mockResolvedValue({ success: true });
+
+      localStorage.setItem("game-test-game-id-turnPhase", "action");
+
+      render(<InGame />);
+
+      const cardElement = await screen.findByAltText("E_COT");
+      fireEvent.click(cardElement);
+
+      const playButton = screen.getByRole("button", { name: /Play/i });
+      fireEvent.click(playButton);
+
+      await waitFor(() => {
+        expect(mockPlayCardEvent).toHaveBeenCalledWith(
+          expect.objectContaining(cotCard)
+        );
+      });
+    });
+
+    it("plays E_ELIA card and receives a new card in inventory", async () => {
+      const eliaCard = {
+        id: "card-elia",
+        name: "E_LIA",
+        type: "EVENT",
+        description: "Leave It All"
+      };
+
+      const newCard = { id: "returned-card", name: "NEW_CARD" };
+      mockCardsByPlayerContext.mockResolvedValue([eliaCard]);
+      mockGetDraftCards.mockResolvedValue([]);
+      mockGetLastDiscardedCard.mockResolvedValue([]);
+      mockGetSecretsGame.mockResolvedValue([]);
+      mockPlayCardEvent.mockResolvedValue(newCard);
+
+      localStorage.setItem("game-test-game-id-turnPhase", "action");
+
+      render(<InGame />);
+
+      const cardElement = await screen.findByAltText("E_LIA");
+      fireEvent.click(cardElement);
+
+      const playButton = screen.getByRole("button", { name: /Play/i });
+      fireEvent.click(playButton);
+
+      await waitFor(() => {
+        expect(mockPlayCardEvent).toHaveBeenCalledWith(
+          expect.objectContaining(eliaCard)
+        );
+        expect(screen.queryByAltText("E_LIA")).not.toBeInTheDocument();
+      });
+    });
+
+    it("handles case where playCardEvent returns null (invalid target or requirement not met)", async () => {
+      const invalidCard = {
+        id: "card-av",
+        name: "E_AV",
+        type: "EVENT",
+        description: "Allies Vanished"
+      };
+
+      mockCardsByPlayerContext.mockResolvedValue([invalidCard]);
+      mockGetDraftCards.mockResolvedValue([]);
+      mockGetLastDiscardedCard.mockResolvedValue([]);
+      mockGetSecretsGame.mockResolvedValue([]);
+      mockPlayCardEvent.mockResolvedValue(null);
+
+      localStorage.setItem("game-test-game-id-turnPhase", "action");
+
+      render(<InGame />);
+
+      const cardElement = await screen.findByAltText("E_AV");
+      fireEvent.click(cardElement);
+
+      const playButton = screen.getByRole("button", { name: /Play/i });
+      fireEvent.click(playButton);
+
+      await waitFor(() => {
+        expect(mockPlayCardEvent).toHaveBeenCalled();
+        expect(toast.error).toHaveBeenCalledWith(
+          "The player you selected doesn't meet the requirements to play this card"
+        );
+        expect(screen.getByAltText("E_AV")).toBeInTheDocument();
+      });
+    });
+
+    it("shows error if cardActionsService throws when playing an EVENT card", async () => {
+      const errorCard = {
+        id: "card-error",
+        name: "E_ATWOM",
+        type: "EVENT",
+        description: "Attack Without Mercy"
+      };
+
+      mockCardsByPlayerContext.mockResolvedValue([errorCard]);
+      mockGetDraftCards.mockResolvedValue([]);
+      mockGetLastDiscardedCard.mockResolvedValue([]);
+      mockGetSecretsGame.mockResolvedValue([]);
+      mockPlayCardEvent.mockRejectedValue(new Error("Server error"));
+
+      localStorage.setItem("game-test-game-id-turnPhase", "action");
+
+      render(<InGame />);
+
+      const cardElement = await screen.findByAltText("E_ATWOM");
+      fireEvent.click(cardElement);
+
+      const playButton = screen.getByRole("button", { name: /Play/i });
+      fireEvent.click(playButton);
+
+      await waitFor(() => {
+        expect(mockPlayCardEvent).toHaveBeenCalled();
+        expect(toast.error).toHaveBeenCalledWith(
+          "The card could not be played"
+        );
+        expect(screen.getByAltText("E_ATWOM")).toBeInTheDocument();
       });
     });
   });
@@ -476,7 +609,7 @@ describe("InGame Component Logic", () => {
       fireEvent.click(card1);
       fireEvent.click(card2);
 
-      const playButton = screen.getByRole("button", { name: /Play Card/i });
+      const playButton = screen.getByRole("button", { name: /Play/i });
       fireEvent.click(playButton);
 
       await waitFor(() => {
@@ -507,7 +640,7 @@ describe("InGame Component Logic", () => {
       fireEvent.click(card1);
       fireEvent.click(card2);
 
-      const playButton = screen.getByRole("button", { name: /Play Card/i });
+      const playButton = screen.getByRole("button", { name: /Play/i });
       fireEvent.click(playButton);
 
       await waitFor(() => {

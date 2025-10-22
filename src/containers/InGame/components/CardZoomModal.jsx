@@ -1,18 +1,18 @@
 import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import MixSetCard from "./MixSetCard";
+import { Eye } from "lucide-react";
 
 export default function CardZoomModal({
   modalType,
   isOpen,
   onClose,
   cards = [],
-  viewingOwnSecrets = false,
+  viewingOwnSecrets = false
 }) {
   useEffect(() => {
     if (!isOpen) return;
 
-    const handleKeyDown = (event) => {
+    const handleKeyDown = event => {
       if (event.key === "Escape") {
         onClose();
       }
@@ -61,7 +61,7 @@ export default function CardZoomModal({
                 const showFront =
                   modalType === "cards" || viewingOwnSecrets || card.revealed;
 
-                  const cardSrc =
+                const cardSrc =
                   modalType === "sets"
                     ? `/cards/D_${card.type}.webp`
                     : showFront
@@ -75,23 +75,28 @@ export default function CardZoomModal({
                     ? card.name
                     : "Secret card";
 
-                
-                if (modalType === "sets" && ["SIBLINGS_B", "HARLEY_MS"].includes(card.type)) {
-                  return <MixSetCard key={i} cardType={card.type} index={i} />;
-                }
-                
                 return (
-                  <motion.img
+                  <motion.div
                     key={`modal-card-${i}`}
-                    src={cardSrc}
-                    alt={cardAlt}
-                    className="
-                      rounded-2xl shadow-2xl w-[200px]
-                      sm:w-[240px] md:w-[250px] lg:w-[280px] 
-                      hover:scale-105 transition-transform duration-200"
+                    className="relative hover:scale-105 "
                     whileHover={{ y: -10 }}
-                    draggable={false}
-                  />
+                  >
+                    <motion.img
+                      src={cardSrc}
+                      alt={cardAlt}
+                      className="
+                        rounded-2xl shadow-2xl w-[200px]
+                        sm:w-[240px] md:w-[250px] lg:w-[280px] 
+                        transition-transform duration-200"
+                      draggable={false}
+                    />
+
+                    {viewingOwnSecrets && card.revealed && (
+                      <div className="absolute top-3 right-3 bg-black/70 rounded-full p-1">
+                        <Eye className="w-7 h-7 text-white" />
+                      </div>
+                    )}
+                  </motion.div>
                 );
               })}
             </div>

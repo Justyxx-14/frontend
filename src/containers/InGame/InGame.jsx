@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useGame } from "@/context/useGame";
 import { createWSService } from "@/services/WSService";
 import { createHttpService } from "@/services/HttpService";
@@ -12,6 +12,7 @@ import SelectionModal from "./components/SelectionModal";
 
 const InGame = () => {
   const { gameId } = useParams();
+  const navigate = useNavigate();
   const {
     currentGame,
     idPlayer,
@@ -39,7 +40,7 @@ const InGame = () => {
   const [turnPhase, setTurnPhase] = useState(() => {
     const storageKey = `game-${gameId}-turnPhase`;
     const savedPhase = localStorage.getItem(storageKey);
-    return savedPhase || "noAction";
+    return savedPhase || "action";
   }); // action || noAction || draw || discard
 
   const [zoomModalState, setZoomModalState] = useState({ isOpen: false });
@@ -55,11 +56,18 @@ const InGame = () => {
       .filter(([id]) => id !== idPlayer)
       .map(([id, name]) => ({ id, name }));
 
+    let currentPlayer = Object.entries(dataPlayers)
+      .filter(([id]) => id === idPlayer)
+      .map(([id, name]) => ({ id, name }));
+
+    currentPlayer = currentPlayer[0];
+
     return createCardActionsService({
       httpService,
       gameId,
       playerId: idPlayer,
       otherPlayers: otherPlayersList,
+      currentPlayer,
       openSelectionModal: config => {
         setSelectionModalState({
           isOpen: true,
@@ -141,8 +149,10 @@ const InGame = () => {
         console.error("Error fetching draft cards:", error);
       }
       try {
-        // in this moment cards/top_discard/{game_id} give five cards
-        let lastCard = await httpService.getLastDiscardedCard(currentGame.id);
+        let lastCard = await httpService.getLastDiscardedCards(
+          currentGame.id,
+          1
+        );
         setLastCardDiscarded(lastCard ? lastCard[0] : {});
       } catch (error) {
         if (error.response?.status === 404) {
@@ -203,12 +213,72 @@ const InGame = () => {
           }
         });
 
-        wsService.on("playerCardDiscarded", data => {
-          setLastCardDiscarded(data.last_card);
+        wsService.on("playSet", async data => {
+          const playerName = dataPlayers[data.player_id];
+          const targetName = dataPlayers[data.target_player];
+          if (idPlayer !== data.player_id) {
+            toast.success(`${playerName} played a set to ${targetName}`);
+          }
+          try {
+            const secrets = await httpService.getSecretsGame(
+              currentGame.id,
+              idPlayer
+            );
+            setInventorySecrets(secrets);
+          } catch (error) {
+            console.error("Error fetching secrets:", error);
+          }
         });
 
-        wsService.on("disconnect", () => {
-          console.warn("WebSocket disconnected");
+        wsService.on("playEvent", async data => {
+          const playerName = dataPlayers[data.id_player];
+          const targetName = dataPlayers[data.target_player];
+          if (idPlayer !== data.player_id) {
+            if (targetName) {
+              toast.success(`${playerName} played a event to ${targetName}`);
+            } else {
+              toast.success(`${playerName} played ${data.name}`);
+            }
+          }
+
+          try {
+            const cards = await cardsByPlayerContext(currentGame.id, idPlayer);
+            setInventoryCards(cards || []);
+          } catch (error) {
+            console.error("Error fetching initial hand:", error);
+          }
+          try {
+            const draftCards = await httpService.getDraftCards(currentGame.id);
+            setInventoryDraftCards(draftCards || []);
+          } catch (error) {
+            console.error("Error fetching draft cards:", error);
+          }
+          try {
+            let lastCard = await httpService.getLastDiscardedCards(
+              currentGame.id,
+              1
+            );
+            setLastCardDiscarded(lastCard ? lastCard[0] : {});
+          } catch (error) {
+            if (error.response?.status === 404) {
+              setLastCardDiscarded(null);
+            } else {
+              console.error("Error drawing from regular deck:", error);
+            }
+          }
+          try {
+            const secrets = await httpService.getSecretsGame(
+              currentGame.id,
+              idPlayer
+            );
+            setInventorySecrets(secrets);
+          } catch (error) {
+            console.error("Error fetching secrets:", error);
+          }
+        });
+
+        wsService.on("playerCardDiscarded", data => {
+          setLastCardDiscarded(data.last_card);
         });
 
         wsService.on("targetPlayerElection", async data => {
@@ -229,6 +299,19 @@ const InGame = () => {
               toast.error(error.message || "error");
             }
           }
+        });
+
+        wsService.on("gameEnd", data => {
+          navigate(`/game/${gameId}/endGame`, {
+            state: {
+              gameResult: data,
+              currentPlayerId: idPlayer
+            }
+          });
+        });
+
+        wsService.on("disconnect", () => {
+          console.warn("WebSocket disconnected");
         });
       } catch (error) {
         console.error("Failed to initialize:", error);
@@ -413,7 +496,10 @@ const InGame = () => {
     }
   };
 
-  const handleShowSets = async (targetPlayerId = idPlayer, targetSetId = null) => {
+  const handleShowSets = async (
+    targetPlayerId = idPlayer,
+    targetSetId = null
+  ) => {
     try {
       const sets = await httpService.getSets(
         currentGame.id,
@@ -454,11 +540,17 @@ const InGame = () => {
         try {
           const result = await cardActionsService.playCardEvent(card);
           if (result) {
-            toast.success(`${card.description} card was played`);
-            setInventoryCards(prev => prev.filter(c => c.id !== card.id));
-            setSelectedCardIds(new Set());
+            if (card.name == "E_LIA") {
+              setInventoryCards(prev => [...prev, result]);
+            }
 
+            setSelectedCardIds(new Set());
+            setInventoryCards(prev => prev.filter(c => c.id !== card.id));
             setTurnPhase("noAction");
+          } else {
+            toast.error(
+              "The player you selected doesn't meet the requirements to play this card"
+            );
           }
         } catch (error) {
           toast.error("The card could not be played");

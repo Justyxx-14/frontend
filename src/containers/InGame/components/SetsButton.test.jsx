@@ -21,7 +21,6 @@ describe("SetsButton", () => {
     render(<SetsButton onClick={() => {}} />);
     const button = screen.getByTestId("sets-button");
     expect(button).toBeInTheDocument();
-    expect(screen.getByText("S")).toBeInTheDocument();
   });
 
   it("calls the onClick handler when the button is clicked", () => {

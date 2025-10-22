@@ -19,7 +19,7 @@ describe("LobbyLayout", () => {
 
   it("renderiza el nombre del lobby y los jugadores", () => {
     render(<LobbyLayout {...baseProps} />);
-    expect(screen.getByText("Lobby Name: Dark Castle")).toBeInTheDocument();
+    expect(screen.getByText("Lobby: Dark Castle")).toBeInTheDocument();
     expect(screen.getByText("Alice")).toBeInTheDocument();
     expect(screen.getByText("Bob")).toBeInTheDocument();
   });

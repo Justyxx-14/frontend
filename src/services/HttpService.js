@@ -110,8 +110,8 @@ const createHttpService = () => {
     });
   };
 
-  const getLastDiscardedCard = async gameId => {
-    return await request(`/cards/top_discard/${gameId}?n_cards=1`, {
+  const getLastDiscardedCards = async (gameId, nCards) => {
+    return await request(`/cards/top_discard/${gameId}?n_cards=${nCards}`, {
       method: "GET"
     });
   };
@@ -149,21 +149,14 @@ const createHttpService = () => {
     });
   };
 
-  const getSets = async (gameId, playerId, setId = null) => {
-    const url = `/sets?game_id=${gameId}&player_id=${playerId}`;
-    if (setId) {
-      url += `&set_id=${setId}`;
-    }
-    return await request(url, {
-      method: "GET",
-    });
-  };
-
   const playCardEvent = async (
     gameId,
     eventID,
     playerID,
     targetPlayer = null,
+    cardId = null,
+    secretId = null,
+    setId = null,
     eventCode
   ) => {
     return await request(`/cards/play/${eventCode}/${gameId}`, {
@@ -171,7 +164,10 @@ const createHttpService = () => {
       body: JSON.stringify({
         player_id: playerID,
         event_id: eventID,
-        target_player: targetPlayer
+        target_player: targetPlayer,
+        card_id: cardId,
+        secret_id: secretId,
+        set_id: setId
       })
     });
   };
@@ -221,6 +217,16 @@ const createHttpService = () => {
     });
   };
 
+  const getSets = async (gameId, playerId, setId = null) => {
+    let url = `/sets?game_id=${gameId}&player_id=${playerId}`;
+    if (setId) {
+      url += `&set_id=${setId}`;
+    }
+    return await request(url, {
+      method: "GET"
+    });
+  };
+
   return {
     createGame,
     joinGame,
@@ -237,7 +243,7 @@ const createHttpService = () => {
     regularDrawCards,
     getDraftCards,
     drawDraftCard,
-    getLastDiscardedCard,
+    getLastDiscardedCards,
     playCardEvent,
     verifySetDetective,
     playDetectiveEffect,

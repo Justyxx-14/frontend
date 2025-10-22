@@ -19,16 +19,15 @@ const LobbyLayout = ({ currentGame, dataPlayers, idPlayer, startGame }) => {
           }}
         ></div>
         <h1 className="absolute top-[5%] left-1/2 -translate-x-1/2 z-20 cursor-default
-                      text-center font-serif tracking-wide
+                      text-center font-s tracking-wide
                       text-5xl text-red-200/70
                       px-4 py-3 rounded-md
                       bg-[#180707] 
                       shadow-[0_0_15px_rgba(139,0,0,0.7)]"
                       style={{ 
                         textShadow: "0 0 10px rgba(255,192,203,0.75)",
-                        fontFamily: "MedievalSharp"
                        }}>
-          Lobby Name: {currentGame?.name}
+          Lobby: {currentGame?.name}
         </h1>
 
         <div

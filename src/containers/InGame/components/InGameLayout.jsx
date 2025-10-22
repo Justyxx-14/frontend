@@ -1,9 +1,15 @@
-import { Trash2 } from "lucide-react";
+import { Trash2, Search } from "lucide-react";
 import { motion } from "framer-motion";
 import CardZoomModal from "./CardZoomModal";
 import PlayerLayout from "./PlayerLayout";
 import SecretButton from "./SecretButton";
 import SetsButton from "./SetsButton";
+
+const cardtam="sm:w-20 md:w-25 lg:w-33";
+const cardh="sm:h-30 md:h-40 lg:h-48 ";
+
+const avatartam="lg:w-20 lg:h-20 md:w-15 md:h-15 sm:w-12 sm:h-12"
+const buttontam="lg:h-12 md:h-9 sm:h-8 lg:w-36 md:w-22 sm:w-25 lg:text-lg md:text-md sm:text-sm";
 
 const InGameLayout = ({
   currentPlayer,
@@ -73,8 +79,7 @@ const InGameLayout = ({
         className="
           absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[60%]
           flex flex-wrap items-center justify-center
-          gap-6 sm:gap-10 md:gap-12
-          max-w-[95vw]"
+          gap-x-10 gap-y-0 max-w-[95vw]"
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.7, ease: "easeOut", delay: 0.3 }}
@@ -82,12 +87,12 @@ const InGameLayout = ({
         {/* Regular Deck */}
         <div
           className="
-            flex flex-col items-center space-y-2 min-w-[90px]
-            order-1 md:order-1"
+            flex flex-col items-center space-y-2
+            order-1 md:order-1 mt-4"
         >
           <motion.div
             onClick={isCurrentTurn ? () => handleDrawRegularCard(1) : undefined}
-            className={`w-20 h-28 sm:w-24 sm:h-36 rounded-lg shadow-xl flex items-center justify-center
+            className={`${cardtam} rounded-lg shadow-xl transition-all duration-200
             ${
               !isCurrentTurn
                 ? "cursor-not-allowed"
@@ -104,49 +109,50 @@ const InGameLayout = ({
             }
           >
             <motion.img
-              className="w-full h-full rounded-lg shadow-lg"
+              className="rounded-lg shadow-lg"
               src="/cards/C_BACK.webp"
               alt="back of a card"
               draggable={false}
             />
           </motion.div>
-          <span className="text-sm text-gray-300">Regular deck</span>
+          <span className="text-sm text-gray-300 flex justify-center">Regular deck</span>
         </div>
 
         {/* Discard */}
         <div
           className="
-          flex flex-col items-center space-y-2 min-w-[90px]
-          order-2 md:order-3"
+          flex flex-col items-center space-y-2
+          order-2 md:order-3 mt-4
+          "
         >
-          <motion.div>
+          <div className="space-y-2">
             {lastCardDiscarded ? (
               <motion.img
                 key={lastCardDiscarded}
                 src={`/cards/${lastCardDiscarded.name}.webp`}
                 alt={lastCardDiscarded.name}
-                className="w-20 h-28 sm:w-24 sm:h-36 rounded-lg shadow-xl"
+                className={`${cardtam} rounded-lg shadow-xl transition-all duration-200`}
                 whileHover={isCurrentTurn ? { scale: 1.05 } : {}}
                 draggable={false}
               />
             ) : (
-              <div className="relative">
-                <div className="w-24 h-36 bg-gray-200 text-black rounded-lg shadow-xl flex items-center justify-center font-medium">
-                  Last Card
-                </div>
-                <div className="absolute top-1 left-1 w-24 h-36 bg-gray-500 rounded-lg opacity-60"></div>
-                <div className="absolute top-2 left-2 w-24 h-36 bg-gray-700 rounded-lg opacity-40"></div>
-              </div>
+            <div
+              className={`
+                ${cardtam} ${cardh} rounded-lg 
+                border-2 border-gray-500 bg-gray-800
+                opacity-40
+              `}
+            />
             )}
-            <span className="text-sm text-gray-300">Discard deck</span>
-          </motion.div>
+            <span className="text-sm text-gray-300 flex justify-center">Discard deck</span>
+          </div>
         </div>
 
         {/* Draft */}
         <div
           className="
-            flex flex-col items-center space-y-2 min-w-[90px]
-            order-3 md:order-2 w-full md:w-auto mt-4 md:mt-0"
+            space-y-2 
+            order-3 md:order-2 mt-4"
         >
           <div className="flex items-center justify-center space-x-3 flex-wrap max-w-[min(95vw,480px)]">
             {inventoryDraftCards.map((card, i) => (
@@ -157,7 +163,7 @@ const InGameLayout = ({
                 }}
                 src={`/cards/${card.name}.webp`}
                 alt={card.name}
-                className={`w-20 h-28 sm:w-24 sm:h-36 rounded-lg shadow-xl transition-all duration-300 ${
+                className={`${cardtam} rounded-lg shadow-xl transition-all duration-200 ${
                   isCurrentTurn
                     ? "cursor-pointer hover:scale-105"
                     : "cursor-not-allowed"
@@ -167,23 +173,23 @@ const InGameLayout = ({
               />
             ))}
           </div>
-          <span className="text-sm text-gray-300">Draft</span>
+          <span className="text-sm text-gray-300 flex justify-center">Draft</span>
         </div>
       </motion.div>
 
       {/* 🔹 Player */}
       <motion.div
-        className="absolute bottom-8 left-1/2 -translate-x-1/2 flex items-end justify-center space-x-6"
+        className="absolute bottom-7 left-1/2 -translate-x-1/2 flex items-end justify-center lg:space-x-3 md:space-x-3 sm:space-x-1"
         initial={{ opacity: 0, y: 60 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7, ease: "easeOut", delay: 0.5 }}
       >
         {/* Avatar and zoom */}
-        <div className="flex flex-col items-center space-y-2 mr-6">
+        <div className="flex flex-col items-center my-5">
           {/* Avatar */}
-          <div className="flex flex-col items-center space-y-1">
+          <div className="flex flex-col items-center lg:space-x-2 md:space-x-1 sm:space-x-1">
             <div
-              className={`w-16 h-16 rounded-full border-2 border-gray-500 ${
+              className={`${avatartam} rounded-full border-2 border-gray-500 ${
                 isCurrentTurn ? "shadow-[0_0_25px_5px_gold]" : ""
               } flex items-center justify-center bg-neutral-900 overflow-hidden`}
             >
@@ -194,7 +200,6 @@ const InGameLayout = ({
                 draggable={false}
               />
             </div>
-
             <span className="text-lg font-semibold text-center">
               {currentPlayer?.name || ""} (You)
             </span>
@@ -208,65 +213,84 @@ const InGameLayout = ({
               data-testid="zoom-button"
               onClick={() => openModal("cards", inventoryCards)}
               className="
-                absolute -bottom-10 -left-25
-                w-8 h-8 rounded-full bg-yellow-700 text-gray-200
+                absolute 
+                lg:top-4 lg:-left-27 md:top-3 md:-left-19 sm:top-2 sm:-left-14
+                lg:w-8 md:w-6 sm:w-4 lg:h-8 md:h-6 sm:h-4 
+                rounded-full bg-yellow-700 text-gray-200
                 flex items-center justify-center
                 hover:scale-110 hover:shadow-[#7a602e]
                 transition-all duration-200
+                border-1 border-black
                "
               title="Zoom"
             >
-              🔍
+              <Search className="
+                lg:w-5 lg:h-5 md:w-4 md:h-4 sm:w-3 sm:h-3
+                text-white" />
             </button>
           </div>
         </div>
 
         {/* Cards and actions */}
-        <div className="flex items-end space-x-3">
+        <div className="
+          flex items-end justify-center
+          lg:space-x-3 md:space-x-1 sm:space-x-1">
           {/* Cards */}
-          {inventoryCards.map((card, i) => {
-            const isSelected = selectedCardIds?.has(card.id);
-            const isDisabled = !isCurrentTurn;
+          <div
+            className={`flex items-center justify-center space-x-2 sm:w-[28rem] md:w-[36rem] lg:w-[50rem] my-3`}
+          >
+            {inventoryCards.map((card, i) => {
+              const isSelected = selectedCardIds?.has(card.id);
+              const isDisabled = !isCurrentTurn;
 
-            return (
-              <motion.div
-                key={i}
-                onClick={() => {
-                  if (!isDisabled) handleCardClick(card.id);
-                }}
-                className={`relative w-20 h-28 sm:w-24 sm:h-36 rounded-lg flex items-center justify-center transition-all duration-300
-                ${
-                  isDisabled
-                    ? "cursor-not-allowed opacity-90"
-                    : "cursor-pointer"
-                }
-                ${
-                  isSelected && !isDisabled
-                    ? "scale-105 ring-4 ring-yellow-500"
-                    : "border-gray-200 hover:scale-105"
-                }`}
-                //whileHover={isDisabled ? {} : { scale: 1.02 }}
-              >
-                <img
-                  src={`/cards/${card.name}.webp`}
-                  alt={card.name}
-                  className={`h-35 rounded-lg shadow-lg transition duration-300 ${
-                    isDisabled ? "grayscale brightness-90" : ""
+              return (
+                <motion.div
+                  key={i}
+                  onClick={() => {
+                    if (!isDisabled) handleCardClick(card.id);
+                  }}
+                  className={
+                    `relative flex items-center justify-center
+                    ${cardtam}
+                    transition-all duration-300
+                  ${
+                    isDisabled
+                      ? "cursor-not-allowed opacity-90"
+                      : "cursor-pointer"
+                  }
+                  ${
+                    isSelected && !isDisabled
+                      ? "scale-103 ring-4 ring-yellow-500 rounded-xl"
+                      : "border-gray-200 hover:scale-105"
                   }`}
-                  draggable={false}
-                />
-              </motion.div>
-            );
-          })}
+                >
+                  <img
+                    src={`/cards/${card.name}.webp`}
+                    alt={card.name}
+                    className={`rounded-lg shadow-lg ${
+                      isDisabled ? "grayscale brightness-90" : ""
+                    }`}
+                    draggable={false}
+                  />
+                </motion.div>
+              );
+            })}
+          </div>
 
           {/* Next turn and discard buttons */}
-          <div className="flex flex-col items-center space-y-3 ml-3">
+          <div className="flex flex-col items-center space-y-3 ml-3 my-5">
             <motion.button
               disabled={
                 !isCurrentTurn || (isCurrentTurn && selectedCardIds?.size === 0)
               }
               onClick={handlePlayCard}
-              className={`p-3 rounded-xl shadow-lg font-bold transition duration-300 flex items-center text-lg
+              className={`
+                ${buttontam}
+                flex items-center justify-center
+                rounded-xl shadow-lg 
+                font-bold 
+                transition duration-300
+                border-1 border-black
               ${
                 !isCurrentTurn || (isCurrentTurn && selectedCardIds?.size === 0)
                   ? "bg-[#55412a] text-gray-400 cursor-not-allowed"
@@ -274,13 +298,19 @@ const InGameLayout = ({
               }`}
               whileTap={isCurrentTurn ? { scale: 0.95 } : {}}
             >
-              Play Card
+              Play
             </motion.button>
 
             <motion.button
               disabled={!isCurrentTurn}
               onClick={handleNextTurnRequest}
-              className={`p-3 rounded-xl shadow-lg font-bold transition duration-300 flex items-center text-lg
+              className={`
+                ${buttontam}
+                flex items-center justify-center
+                rounded-xl shadow-lg 
+                font-bold text-lg
+                transition duration-300
+                border-1 border-black
               ${
                 isCurrentTurn
                   ? "bg-yellow-700 text-gray-200 hover:shadow-[#7a602e] transform hover:scale-105"
@@ -294,7 +324,13 @@ const InGameLayout = ({
             <motion.button
               onClick={handleDiscard}
               disabled={!isDiscardButtonEnabled || !isCurrentTurn}
-              className={`p-3 rounded-xl shadow-lg font-bold transition duration-300 flex items-center text-lg whitespace-nowrap
+              className={`
+                ${buttontam}
+                flex items-center justify-center
+                rounded-xl shadow-lg 
+                font-bold text-lg
+                transition duration-300
+                border-1 border-black
               ${
                 isDiscardButtonEnabled
                   ? "bg-yellow-700 text-gray-200 hover:shadow-[#7a602e] transform hover:scale-105"

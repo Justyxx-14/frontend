@@ -175,4 +175,48 @@ describe("SelectionModal Component", () => {
       expect(mockOnSelect).toHaveBeenCalledWith("secret-2");
     });
   });
+
+  describe("when itemType is 'set'", () => {
+    const setItems = [
+      { id: "set-1", type: "HP" },
+      { id: "set-2", type: "MM" }
+    ];
+
+    beforeEach(() => {
+      mockOnSelect.mockClear();
+    });
+
+    it("renders set items when itemType is 'set'", () => {
+      render(
+        <SelectionModal
+          isOpen={true}
+          title="Select a Set"
+          items={setItems}
+          itemType="set"
+          onSelect={mockOnSelect}
+        />
+      );
+
+      // Verificar que los sets se rendericen con las imágenes correspondientes
+      expect(screen.getByAltText("HP-0")).toBeInTheDocument();
+      expect(screen.getByAltText("MM-0")).toBeInTheDocument();
+    });
+
+    it("calls onSelect with the correct set ID when a set item is clicked", () => {
+      render(
+        <SelectionModal
+          isOpen={true}
+          items={setItems}
+          itemType="set"
+          onSelect={mockOnSelect}
+        />
+      );
+
+      const setElement = screen.getByAltText("MM-0").closest("div");
+      fireEvent.click(setElement);
+
+      expect(mockOnSelect).toHaveBeenCalledTimes(1);
+      expect(mockOnSelect).toHaveBeenCalledWith("set-2");
+    });
+  });
 });

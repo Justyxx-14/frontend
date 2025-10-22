@@ -40,7 +40,7 @@ export const createCardDetectiveService = ({
     }
 
     selectedSecretId = await _promptForSecret(
-      "select a secret you want to reveal",
+      "Select a secret you want to reveal",
       secrets,
       targetPlayerId
     );

@@ -21,7 +21,6 @@ describe("SecretButton", () => {
     render(<SecretButton onClick={() => {}} />);
     const button = screen.getByTestId("secret-button");
     expect(button).toBeInTheDocument();
-    expect(screen.getByText("🤫")).toBeInTheDocument();
   });
 
   it("calls the onClick handler when the button is clicked", () => {

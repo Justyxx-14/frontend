@@ -36,6 +36,41 @@ const PlayerItem = ({ player, onClick }) => (
   </motion.div>
 );
 
+const SetItem = ({ set, onClick }) => {
+  const setImagesMap = {
+    HP: ["/cards/D_HP.webp"],
+    MM: ["/cards/D_MM.webp"],
+    MS: ["/cards/D_MS.webp"],
+    HARLEY_MS: ["/cards/D_HARLEY_MS.webp"],
+    PP: ["/cards/D_PP.webp"],
+    LEB: ["/cards/D_LEB.webp"],
+    TB: ["/cards/D_TB.webp"],
+    TUB: ["/cards/D_TUB.webp"],
+    SIBLINGS_B: ["/cards/D_SIBLINGS_B.webp"]
+  };
+
+  const images = setImagesMap[set.type] || [];
+
+  return (
+    <motion.div
+      onClick={onClick}
+      whileHover={{ scale: 1.05 }}
+      className="flex flex-row items-center justify-center gap-4 cursor-pointer bg-neutral-900/30 p-4 rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300"
+    >
+      {images.map((src, index) => (
+        <motion.img
+          key={index}
+          src={src}
+          alt={`${set.type}-${index}`}
+          className="rounded-2xl shadow-lg w-[180px] sm:w-[200px] md:w-[240px] lg:w-[260px] object-contain transition-transform duration-200"
+          draggable={false}
+          whileHover={{ y: -8 }}
+        />
+      ))}
+    </motion.div>
+  );
+};
+
 const SecretItem = ({ secret, onClick, viewingPlayerId }) => {
   {
     const isMySecret = viewingPlayerId === secret.owner_player_id;
@@ -63,7 +98,7 @@ const SelectionModal = ({
   isOpen,
   title,
   items = [],
-  itemType, // 'card' | 'player' | 'secret'
+  itemType, // 'card' | 'player' | 'secret' | 'set'
   onSelect,
   viewingPlayerId
 }) => {
@@ -119,6 +154,16 @@ const SelectionModal = ({
                   <SecretItem
                     key={item.id}
                     secret={item}
+                    onClick={() => onSelect(item.id)}
+                    viewingPlayerId={viewingPlayerId}
+                  />
+                );
+              }
+              if (itemType === "set") {
+                return (
+                  <SetItem
+                    key={item.id}
+                    set={item}
                     onClick={() => onSelect(item.id)}
                     viewingPlayerId={viewingPlayerId}
                   />

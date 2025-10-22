@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { render, screen, fireEvent, within,  waitFor} from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import InGameLayout from "./InGameLayout";
 
@@ -150,13 +150,23 @@ describe("InGameLayout Component", () => {
       expect(mockOnShowSecrets).toHaveBeenCalledWith("player-2");
     });
 
-    it("calls onShowSets when the player's own sets button is clicked", () => {
+    it("calls onShowSets when the player's own sets button is clicked", async () => {
       render(<InGameLayout {...defaultProps} />);
+
       const buttonSection = screen.getByText(/\(You\)/i).closest("div").nextSibling;
-      const setsButton = within(buttonSection).getByRole("button", { name: "S" });
+
+      // Usamos getByTestId para el SetsButton
+      const setsButton = within(buttonSection).getByTestId("sets-button");
+
+      // Si tu función es async, mockeala como promesa
+      defaultProps.onShowSets.mockResolvedValueOnce();
+
       fireEvent.click(setsButton);
 
-      expect(mockOnShowSets).toHaveBeenCalledTimes(1);
+      // Esperamos que se llame
+      await waitFor(() => {
+        expect(defaultProps.onShowSets).toHaveBeenCalledTimes(1);
+      });
     });
 
     it("calls onShowSets with the correct player ID when another player's sets button is clicked", () => {
