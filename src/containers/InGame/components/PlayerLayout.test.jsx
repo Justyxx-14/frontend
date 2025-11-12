@@ -4,11 +4,11 @@ import PlayerLayout from "./PlayerLayout";
 
 // Mock child components
 vi.mock("./SecretButton", () => ({
-  default: ({ onClick }) => <button onClick={onClick}>Secrets</button>,
+  default: ({ onClick }) => <button onClick={onClick}>Secrets</button>
 }));
 
 vi.mock("./SetsButton", () => ({
-  default: ({ onClick }) => <button onClick={onClick}>Sets</button>,
+  default: ({ onClick }) => <button onClick={onClick}>Sets</button>
 }));
 
 vi.mock("framer-motion", async () => {
@@ -19,8 +19,8 @@ vi.mock("framer-motion", async () => {
         <div {...props} ref={ref}>
           {children}
         </div>
-      )),
-    },
+      ))
+    }
   };
 });
 
@@ -34,7 +34,7 @@ describe("PlayerLayout Component", () => {
     i: 0,
     totalPlayers: 3,
     onSecretButtonClick: mockOnSecretButtonClick,
-    onSetsButtonClick: mockOnSetsButtonClick,
+    onSetsButtonClick: mockOnSetsButtonClick
   };
 
   beforeEach(() => {
@@ -88,5 +88,31 @@ describe("PlayerLayout Component", () => {
     fireEvent.click(setsButton);
 
     expect(mockOnSetsButtonClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the Social Disgrace and tooltip when player is in social disgrace", () => {
+    render(
+      <PlayerLayout
+        {...defaultProps}
+        player={{ name: "Alice", socialDisgrace: true }}
+      />
+    );
+
+    const badge = screen.getByAltText("Social Disgrace");
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveAttribute("src", "/socialDisgrace.webp");
+
+    const tooltip = screen.getByText(/Player in social disgrace/i);
+    expect(tooltip).toBeInTheDocument();
+  });
+
+  it("does not renders the Social Disgrace and tooltip when player isn't in social disgrace", () => {
+    render(<PlayerLayout {...defaultProps} />);
+
+    const badge = screen.queryByAltText("Social Disgrace");
+    expect(badge).toBeNull();
+
+    const tooltip = screen.queryByText(/Player in social disgrace/i);
+    expect(tooltip).toBeNull();
   });
 });

@@ -1,6 +1,7 @@
 import { useGame } from "@/context/useGame";
 import { useState, useEffect } from "react";
 import { createWSService } from "@/services/WSService";
+import { createHttpService } from "@/services/HttpService";
 import { useNavigate } from "react-router-dom";
 import LobbyLayout from "./components/LobbyLayout";
 
@@ -23,6 +24,19 @@ export default function Lobby() {
   };
 
   const navigate = useNavigate();
+  const [httpService] = useState(() => createHttpService());
+
+  const leaveGame = async () => {
+    try {
+      // USAR EL HTTP SERVICE PARA LLAMAR AL ENDPOINT
+      await httpService.leaveGame(currentGame.id, idPlayer);
+      // NO navegar inmediatamente aquí, esperar el mensaje WebSocket
+    } catch (error) {
+      console.error("Error leaving the game: ", error);
+      // En caso de error, redirigir de todas formas
+      navigate('/');
+    }
+  };
 
   useEffect(() => {
     if (!idPlayer || !currentGame?.id) return;
@@ -51,6 +65,30 @@ export default function Lobby() {
       }
     };
 
+    // Nuevos manejadores para eventos de abandono
+    const handlePlayerLeft = (data) => {
+      if (data.game_id === currentGame.id) {
+        // Si el jugador que se fue es el actual usuario, redirigir
+        if (data.player_id === idPlayer) {
+          navigate('/');
+        } else {
+          // Actualizar la lista de jugadores removiendo al que se fue
+          setDataPlayers((prev) => {
+            const newData = { ...prev };
+            delete newData[data.player_id];
+            return newData;
+          });
+        }
+      }
+    };
+
+    const handleGameCancelled = (data) => {
+      if (data.game_id === currentGame.id) {
+        // El host abandonó, redirigir a todos los jugadores
+        navigate('/');
+      }
+    };
+
     setTimeout(() => {
       wsService.connect(currentGame.id);
     }, 500);
@@ -58,6 +96,8 @@ export default function Lobby() {
     wsService.on("playerJoined", handleJoin);
     wsService.on("leavePlayerFromGame", handleLeave);
     wsService.on("GameStarted", handleStartGame);
+    wsService.on("playerLeft", handlePlayerLeft);
+    wsService.on("GameCancelled", handleGameCancelled);
     wsService.on("disconnect", () => {
       console.warn("WebSocket disconnected");
     });
@@ -66,6 +106,8 @@ export default function Lobby() {
       wsService.off("playerJoined", handleJoin);
       wsService.off("leavePlayerFromGame", handleLeave);
       wsService.off("GameStarted", handleStartGame);
+      wsService.off("playerLeft", handlePlayerLeft);
+      wsService.off("GameCancelled", handleGameCancelled);
       wsService.disconnect();
     };
   }, [currentGame?.id, idPlayer]);
@@ -77,6 +119,7 @@ export default function Lobby() {
       dataPlayers={dataPlayers}
       startGame={startGame}
       idPlayer={idPlayer}
+      leaveGame={leaveGame}
     />
   );
 }

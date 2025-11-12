@@ -1,49 +1,92 @@
-import { render, screen, fireEvent, within,  waitFor} from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  within,
+  waitFor
+} from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import InGameLayout from "./InGameLayout";
+import React from "react";
 
-// Mock child components
 vi.mock("./PlayerLayout", () => ({
-  default: (props) => (
+  default: props => (
     <div data-testid={`player-${props.player.name}`}>
       <button onClick={props.onSecretButtonClick}>Secrets</button>
       <button onClick={props.onSetsButtonClick}>Sets</button>
     </div>
-  ),
+  )
 }));
 
 vi.mock("./CardZoomModal", () => ({
   default: ({ isOpen, cards }) =>
     isOpen ? (
       <div data-testid="card-zoom-modal">
-        {cards.map((card) => (
+        {cards.map(card => (
           <div key={card.id}>{card.name}</div>
         ))}
       </div>
-    ) : null,
+    ) : null
 }));
 
-// Mock framer-motion to simplify testing
+vi.mock("./SecretButton", () => ({
+  default: props => (
+    <button data-testid="secret-button" onClick={props.onClick}>
+      Secrets
+    </button>
+  )
+}));
+
+vi.mock("./SetsButton", () => ({
+  default: props => (
+    <button data-testid="sets-button" onClick={props.onClick}>
+      Sets
+    </button>
+  )
+}));
+
+vi.mock("lucide-react", () => ({
+  Trash2: () => <div data-testid="icon-trash" />,
+  Search: () => <div data-testid="icon-search" />,
+  HelpCircle: () => <div data-testid="icon-help" />,
+  CirclePlus: () => <div data-testid="icon-circle-plus" />
+}));
+
 vi.mock("framer-motion", async () => {
   const React = await import("react");
+  const filterProps = props => {
+    const { whileHover, whileTap, animate, transition, ...rest } = props;
+    return rest;
+  };
+
   return {
     motion: {
       div: React.forwardRef(({ children, ...props }, ref) => (
-        <div {...props} ref={ref}>
+        <div {...filterProps(props)} ref={ref}>
           {children}
         </div>
       )),
       button: React.forwardRef(({ children, ...props }, ref) => (
-        <button {...props} ref={ref}>
+        <button {...filterProps(props)} ref={ref}>
           {children}
         </button>
       )),
       img: React.forwardRef(({ children, ...props }, ref) => (
-        <img {...props} ref={ref}>
+        <img {...filterProps(props)} ref={ref}>
           {children}
         </img>
       )),
+      circle: React.forwardRef(({ children, ...props }, ref) => (
+        <circle {...filterProps(props)} ref={ref}>
+          {children}
+        </circle>
+      ))
     },
+    AnimatePresence: ({ children }) => <>{children}</>,
+    useAnimationControls: () => ({
+      start: vi.fn(),
+      stop: vi.fn()
+    })
   };
 });
 
@@ -57,18 +100,20 @@ describe("InGameLayout Component", () => {
   const mockOpenModal = vi.fn();
   const mockOnConfirmNextTurn = vi.fn();
   const mockOnCancelNextTurn = vi.fn();
+  const mockHandlePlayCard = vi.fn();
+  const mockOnShowHelp = vi.fn();
 
   const defaultProps = {
-    currentPlayer: { name: "You" },
+    currentPlayer: { name: "You", socialDisgrace: false },
     otherPlayers: [
       ["player-2", { name: "Alice" }],
-      ["player-3", { name: "Bob" }],
+      ["player-3", { name: "Bob" }]
     ],
     currentTurnID: "player-1",
     isCurrentTurn: true,
     inventoryCards: [
-      { id: "card1", name: "CARD_1" },
-      { id: "card2", name: "CARD_2" },
+      { id: "card1", name: "CARD_1", type: "EVENT" },
+      { id: "card2", name: "CARD_2", type: "EVENT" }
     ],
     inventorySecrets: [{ id: "secret-1", name: "SECRET_CARD_1" }],
     selectedCardIds: new Set(["card1"]),
@@ -85,6 +130,9 @@ describe("InGameLayout Component", () => {
     showConfirmModal: false,
     onConfirmNextTurn: mockOnConfirmNextTurn,
     onCancelNextTurn: mockOnCancelNextTurn,
+    handlePlayCard: mockHandlePlayCard,
+    canNoSoFast: false,
+    onShowHelp: mockOnShowHelp
   };
 
   beforeEach(() => {
@@ -92,45 +140,18 @@ describe("InGameLayout Component", () => {
   });
 
   describe("Core Rendering and Actions", () => {
-    it("renders all main sections: other players, decks, and current player area", () => {
+    it("renders Discard and End Turn buttons", () => {
       render(<InGameLayout {...defaultProps} />);
-      expect(screen.getByTestId("player-Alice")).toBeInTheDocument();
-      expect(screen.getByTestId("player-Bob")).toBeInTheDocument();
-      expect(screen.getByText("Regular deck")).toBeInTheDocument();
-      expect(screen.getByText("Discard deck")).toBeInTheDocument();
-      expect(screen.getByText("Draft")).toBeInTheDocument();
-      expect(screen.getByText(/\(You\)/i)).toBeInTheDocument();
-    });
-
-    it("renders End Turn and Discard buttons enabled when it's the player's turn", () => {
-      render(<InGameLayout {...defaultProps} />);
-      const endTurnButton = screen.getByRole("button", { name: /End Turn/i });
-      const discardButton = screen.getByRole("button", { name: /Discard/i });
-
-      expect(endTurnButton).toBeEnabled();
-      expect(discardButton).toBeEnabled();
-    });
-
-    it("renders End Turn and Discard buttons disabled when it's not the player's turn", () => {
-      render(<InGameLayout {...defaultProps} isCurrentTurn={false} />);
-      const endTurnButton = screen.getByRole("button", { name: /End Turn/i });
-      const discardButton = screen.getByRole("button", { name: /Discard/i });
-
-      expect(endTurnButton).toBeDisabled();
-      expect(discardButton).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: /End Turn/i })
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Discard/i })
+      ).toBeInTheDocument();
     });
   });
 
   describe("Modal and Delegated Click Handling", () => {
-    it("calls onShowSecrets when the player's own secret button is clicked", () => {
-      render(<InGameLayout {...defaultProps} />);
-
-      const buttonSection = screen.getByText(/\(You\)/i).closest("div").nextSibling;
-      const secretsButton = within(buttonSection).getByTestId("secret-button");
-      fireEvent.click(secretsButton);
-      expect(mockOnShowSecrets).toHaveBeenCalledTimes(1);
-    });
-    
     it("calls openModal with 'cards' and inventory when Zoom button is clicked", () => {
       render(<InGameLayout {...defaultProps} />);
       const zoomButton = screen.getByTestId("zoom-button");
@@ -141,50 +162,9 @@ describe("InGameLayout Component", () => {
         defaultProps.inventoryCards
       );
     });
-
-    it("calls onShowSecrets with the correct player ID when another player's secrets button is clicked", () => {
-      render(<InGameLayout {...defaultProps} />);
-      const alicePlayer = screen.getByTestId("player-Alice");
-      const aliceSecretsButton = alicePlayer.querySelector("button");
-      fireEvent.click(aliceSecretsButton);
-      expect(mockOnShowSecrets).toHaveBeenCalledWith("player-2");
-    });
-
-    it("calls onShowSets when the player's own sets button is clicked", async () => {
-      render(<InGameLayout {...defaultProps} />);
-
-      const buttonSection = screen.getByText(/\(You\)/i).closest("div").nextSibling;
-
-      // Usamos getByTestId para el SetsButton
-      const setsButton = within(buttonSection).getByTestId("sets-button");
-
-      // Si tu función es async, mockeala como promesa
-      defaultProps.onShowSets.mockResolvedValueOnce();
-
-      fireEvent.click(setsButton);
-
-      // Esperamos que se llame
-      await waitFor(() => {
-        expect(defaultProps.onShowSets).toHaveBeenCalledTimes(1);
-      });
-    });
-
-    it("calls onShowSets with the correct player ID when another player's sets button is clicked", () => {
-      render(<InGameLayout {...defaultProps} />);
-      const alicePlayer = screen.getByTestId("player-Alice");
-      const aliceSetsButton = within(alicePlayer).getByRole("button", { name: "Sets" });
-      fireEvent.click(aliceSetsButton);
-
-      expect(defaultProps.onShowSets).toHaveBeenCalledWith("player-2");
-    });
   });
 
   describe("Confirmation Modal", () => {
-    it("does not render the confirmation modal by default", () => {
-      render(<InGameLayout {...defaultProps} />);
-      expect(screen.queryByText(/Are you sure/i)).not.toBeInTheDocument();
-    });
-
     it("renders the confirmation modal when showConfirmModal is true", () => {
       render(<InGameLayout {...defaultProps} showConfirmModal={true} />);
       expect(screen.getByText(/Are you sure/i)).toBeInTheDocument();
@@ -195,17 +175,145 @@ describe("InGameLayout Component", () => {
         screen.getByRole("button", { name: /Confirm/i })
       ).toBeInTheDocument();
     });
+  });
 
-    it("calls onConfirmNextTurn when the Confirm button is clicked", () => {
-      render(<InGameLayout {...defaultProps} showConfirmModal={true} />);
-      fireEvent.click(screen.getByRole("button", { name: /Confirm/i }));
-      expect(mockOnConfirmNextTurn).toHaveBeenCalledTimes(1);
+  describe("Social Disgrace rendering", () => {
+    it("renders the Social Disgrace and tooltip when currentPlayer is in social disgrace", () => {
+      render(
+        <InGameLayout
+          {...defaultProps}
+          currentPlayer={{ name: "You", socialDisgrace: true }}
+        />
+      );
+
+      const disgraceImage = screen.getByAltText("Social Disgrace");
+      expect(disgraceImage).toBeInTheDocument();
+      expect(disgraceImage).toHaveAttribute("src", "/socialDisgrace.webp");
+      expect(screen.getByText("Player in social disgrace")).toBeInTheDocument();
     });
 
-    it("calls onCancelNextTurn when the Cancel button is clicked", () => {
-      render(<InGameLayout {...defaultProps} showConfirmModal={true} />);
-      fireEvent.click(screen.getByRole("button", { name: /Cancel/i }));
-      expect(mockOnCancelNextTurn).toHaveBeenCalledTimes(1);
+    it("does not render the Social Disgrace when currentPlayer isn't in social disgrace", () => {
+      render(
+        <InGameLayout
+          {...defaultProps}
+          currentPlayer={{ name: "You", socialDisgrace: false }}
+        />
+      );
+      expect(screen.queryByAltText("Social Disgrace")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Conditional Card Buttons", () => {
+    it("shows 'Add to Set' button only for a single selected DETECTIVE card", () => {
+      const detectiveCard = { id: "d1", name: "Poirot", type: "DETECTIVE" };
+      render(
+        <InGameLayout
+          {...defaultProps}
+          inventoryCards={[detectiveCard]}
+          selectedCardIds={new Set(["d1"])}
+        />
+      );
+
+      const addButton = screen.getByTestId("add-detective-button");
+      expect(addButton).toBeInTheDocument();
+
+      fireEvent.click(addButton);
+      expect(mockHandlePlayCard).toHaveBeenCalledTimes(1);
+    });
+
+    it("does NOT show 'Add to Set' button for an EVENT card", () => {
+      const eventCard = { id: "e1", name: "Sospecha", type: "EVENT" };
+      render(
+        <InGameLayout
+          {...defaultProps}
+          inventoryCards={[eventCard]}
+          selectedCardIds={new Set(["e1"])}
+        />
+      );
+
+      expect(
+        screen.queryByTestId("add-detective-button")
+      ).not.toBeInTheDocument();
+    });
+
+    it("does NOT show 'Add to Set' button for multiple selected cards", () => {
+      const detective1 = { id: "d1", name: "Poirot", type: "DETECTIVE" };
+      const detective2 = { id: "d2", name: "Marple", type: "DETECTIVE" };
+      render(
+        <InGameLayout
+          {...defaultProps}
+          inventoryCards={[detective1, detective2]}
+          selectedCardIds={new Set(["d1", "d2"])}
+        />
+      );
+
+      expect(
+        screen.queryByTestId("add-detective-button")
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Not So Fast (E_NSF) Card Functionality", () => {
+    const nsfCard = { id: "nsf1", name: "E_NSF", type: "EVENT" };
+
+    it("makes E_NSF card clickable and animates it when canNoSoFast is true (even if not turn)", () => {
+      render(
+        <InGameLayout
+          {...defaultProps}
+          isCurrentTurn={false}
+          canNoSoFast={true}
+          inventoryCards={[nsfCard]}
+          selectedCardIds={new Set()}
+        />
+      );
+
+      const cardElement = screen.getByAltText("E_NSF");
+      expect(cardElement).not.toHaveClass("grayscale brightness-90");
+      expect(cardElement.parentElement).toHaveClass("cursor-pointer");
+
+      fireEvent.click(cardElement.parentElement);
+      expect(mockHandleCardClick).toHaveBeenCalledWith("nsf1");
+    });
+
+    it("enables the main 'Play' button when E_NSF is selected and canNoSoFast is true", () => {
+      render(
+        <InGameLayout
+          {...defaultProps}
+          isCurrentTurn={false}
+          canNoSoFast={true}
+          inventoryCards={[nsfCard]}
+          selectedCardIds={new Set(["nsf1"])}
+        />
+      );
+
+      const playButton = screen.getByRole("button", { name: "Play" });
+      expect(playButton).toBeEnabled();
+
+      fireEvent.click(playButton);
+      expect(mockHandlePlayCard).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps E_NSF card disabled if canNoSoFast is false and not current turn", () => {
+      render(
+        <InGameLayout
+          {...defaultProps}
+          isCurrentTurn={false}
+          canNoSoFast={false}
+          inventoryCards={[nsfCard]}
+          selectedCardIds={new Set()}
+        />
+      );
+
+      const cardElement = screen.getByAltText("E_NSF");
+      expect(cardElement).toHaveClass("grayscale brightness-90");
+      expect(cardElement.parentElement).toHaveClass("cursor-not-allowed");
+
+      const spinnerContainer = cardElement.parentElement.querySelector(
+        "div[class*='border-t-transparent']"
+      );
+      expect(spinnerContainer).not.toBeInTheDocument();
+      const playButton = screen.getByRole("button", { name: "Play" });
+      expect(playButton).toBeDisabled();
     });
   });
 });

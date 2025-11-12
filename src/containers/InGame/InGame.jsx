@@ -9,10 +9,16 @@ import { createCardDetectiveService } from "@/services/CardDetectiveService";
 import toast from "react-hot-toast";
 import InGameLayout from "./components/InGameLayout";
 import SelectionModal from "./components/SelectionModal";
+import { UseTurnPhase } from "@/services/UseTurnPhase";
+import TurnTimer from "./components/TurnTimer";
+import { UseGameWebSocket } from "@/services/UseGameWebSocket";
+import { UseCardPlay } from "@/services/UseCardPlay";
+import HowToPlayModal from "../components/HowToPlay";
 
 const InGame = () => {
   const { gameId } = useParams();
   const navigate = useNavigate();
+
   const {
     currentGame,
     idPlayer,
@@ -23,6 +29,7 @@ const InGame = () => {
 
   const [wsService] = useState(() => createWSService());
   const [httpService] = useState(() => createHttpService());
+
   const [inventoryCards, setInventoryCards] = useState([]);
   const [inventoryDraftCards, setInventoryDraftCards] = useState([]);
   const [inventorySecrets, setInventorySecrets] = useState([]);
@@ -30,25 +37,50 @@ const InGame = () => {
   const [selectedCardIds, setSelectedCardIds] = useState(new Set());
   const [currentTurnID, setCurrentTurnID] = useState(null);
   const [isCurrentTurn, setIsCurrentTurn] = useState(null);
+  const [isPlayerSocialDisgrace, setIsPlayerSocialDisgrace] = useState(null);
   const [players, setPlayers] = useState();
-
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [canNoSoFast, setCanNoSoFast] = useState(false);
+  const [nsfResetKey, setNsfResetKey] = useState(0);
+
   const [hideTurnWarning, setHideTurnWarning] = useState(
     localStorage.getItem("hideTurnWarning") === "true"
   );
 
-  const [turnPhase, setTurnPhase] = useState(() => {
-    const storageKey = `game-${gameId}-turnPhase`;
-    const savedPhase = localStorage.getItem(storageKey);
-    return savedPhase || "action";
-  }); // action || noAction || draw || discard
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+
+  const { turnInfo, setTurnInfo, initialRemainingTime, timerIsPaused } =
+    UseTurnPhase({
+      currentGame,
+      httpService,
+      idPlayer,
+      inventoryCards,
+      inventoryDraftCards,
+      inventorySecrets,
+      setCurrentTurnID,
+      setIsCurrentTurn,
+      currentTurnID
+    });
+
+  const turnState = turnInfo?.turn_state || null;
 
   const [zoomModalState, setZoomModalState] = useState({ isOpen: false });
   const [selectionModalState, setSelectionModalState] = useState({
     isOpen: false
   });
 
-  //
+  const openZoomModal = (type, cardsToShow, title, isOwnSecrets = false) => {
+    setZoomModalState({
+      isOpen: true,
+      modalType: type,
+      cards: cardsToShow,
+      title: title,
+      viewingOwnSecrets: isOwnSecrets
+    });
+  };
+
+  const closeZoomModal = () => setZoomModalState({ isOpen: false });
+
   const cardActionsService = useMemo(() => {
     if (!httpService || !gameId || !idPlayer || !dataPlayers) return null;
 
@@ -58,9 +90,7 @@ const InGame = () => {
 
     let currentPlayer = Object.entries(dataPlayers)
       .filter(([id]) => id === idPlayer)
-      .map(([id, name]) => ({ id, name }));
-
-    currentPlayer = currentPlayer[0];
+      .map(([id, name]) => ({ id, name }))[0];
 
     return createCardActionsService({
       httpService,
@@ -68,15 +98,16 @@ const InGame = () => {
       playerId: idPlayer,
       otherPlayers: otherPlayersList,
       currentPlayer,
+      openZoomModal,
       openSelectionModal: config => {
-        setSelectionModalState({
+        setSelectionModalState(prev => ({
           isOpen: true,
           ...config,
           onSelect: selectedId => {
             config.onSelect(selectedId);
             setSelectionModalState({ isOpen: false });
           }
-        });
+        }));
       }
     });
   }, [httpService, gameId, idPlayer, dataPlayers]);
@@ -94,36 +125,59 @@ const InGame = () => {
       playerId: idPlayer,
       otherPlayers: otherPlayersList,
       openSelectionModal: config => {
-        setSelectionModalState({
+        setSelectionModalState(prev => ({
           isOpen: true,
           ...config,
           onSelect: selectedId => {
             config.onSelect(selectedId);
             setSelectionModalState({ isOpen: false });
           }
-        });
+        }));
       }
     });
   }, [httpService, gameId, idPlayer, dataPlayers]);
 
+  const reloadPlayerData = async () => {
+    if (!currentGame?.id || !idPlayer) return;
+    try {
+      const [cards, draft, secrets] = await Promise.all([
+        cardsByPlayerContext(currentGame.id, idPlayer),
+        httpService.getDraftCards(currentGame.id),
+        httpService.getSecretsGame(currentGame.id, idPlayer)
+      ]);
+
+      setInventoryCards(cards || []);
+      setInventoryDraftCards(draft || []);
+      setInventorySecrets(secrets || []);
+      const socialStatus = await httpService.getSocialDisgraceByGame(
+        currentGame.id
+      );
+      setIsPlayerSocialDisgrace(socialStatus);
+      try {
+        const lastCard = await httpService.getLastDiscardedCards(
+          currentGame.id,
+          1
+        );
+        setLastCardDiscarded(lastCard ? lastCard[0] : {});
+      } catch (err) {
+        if (err.response?.status === 404) setLastCardDiscarded(null);
+        else console.error("Error fetching last discarded", err);
+      }
+    } catch (err) {
+      console.error("Error reloading player data", err);
+    }
+  };
+
   useEffect(() => {
-    const storageKey = `game-${gameId}-turnPhase`;
+    if (!currentGame || !idPlayer) return;
+    reloadPlayerData();
+  }, [currentGame, idPlayer, cardsByPlayerContext]);
 
-    localStorage.removeItem(storageKey);
-
-    localStorage.setItem(storageKey, turnPhase);
-
-    return () => {
-      localStorage.removeItem(storageKey);
-    };
-  }, [gameId, turnPhase]);
-
-  // Format players data
   useEffect(() => {
     if (dataPlayers) {
       const formatted = Object.entries(dataPlayers).reduce(
         (acc, [id, name]) => {
-          acc[id] = { name, cards: 6 };
+          acc[id] = { name, cards: 6, socialDisgrace: false };
           return acc;
         },
         {}
@@ -131,205 +185,120 @@ const InGame = () => {
       setPlayers(formatted);
     }
   }, [dataPlayers]);
-
-  // Get initial hand
+  // Apply Social Disgrace info into players
   useEffect(() => {
-    const init = async () => {
-      if (!currentGame || !idPlayer) return;
-      try {
-        const cards = await cardsByPlayerContext(currentGame.id, idPlayer);
-        setInventoryCards(cards || []);
-      } catch (error) {
-        console.error("Error fetching initial hand:", error);
-      }
-      try {
-        const draftCards = await httpService.getDraftCards(currentGame.id);
-        setInventoryDraftCards(draftCards || []);
-      } catch (error) {
-        console.error("Error fetching draft cards:", error);
-      }
-      try {
-        let lastCard = await httpService.getLastDiscardedCards(
-          currentGame.id,
-          1
-        );
-        setLastCardDiscarded(lastCard ? lastCard[0] : {});
-      } catch (error) {
-        if (error.response?.status === 404) {
-          setLastCardDiscarded(null);
-        } else {
-          console.error("Error drawing from regular deck:", error);
+    if (!players || !isPlayerSocialDisgrace) return;
+
+    setPlayers(prev => {
+      const updated = structuredClone(prev);
+      Object.entries(isPlayerSocialDisgrace).forEach(([playerId, status]) => {
+        if (updated[playerId]) {
+          updated[playerId].socialDisgrace = status;
         }
-      }
-      try {
-        const secrets = await httpService.getSecretsGame(
-          currentGame.id,
-          idPlayer
-        );
-        setInventorySecrets(secrets);
-      } catch (error) {
-        console.error("Error fetching secrets:", error);
-      }
-    };
-    init();
-  }, [currentGame, idPlayer, cardsByPlayerContext, gameId]);
-
-  // Init turns and WebSocket listeners
-  useEffect(() => {
-    const init = async () => {
-      try {
-        if (!idPlayer || !currentGame?.id) return;
-
-        const firstTurnPlayerId = await httpService.getTurnGame(currentGame.id);
-        setCurrentTurnID(firstTurnPlayerId.id);
-        setIsCurrentTurn(firstTurnPlayerId.id === idPlayer);
-
-        setTimeout(() => {
-          wsService.connect(currentGame.id);
-        }, 500);
-
-        wsService.on("turnChange", data => {
-          setCurrentTurnID(data);
-          setIsCurrentTurn(data === idPlayer);
-          setTurnPhase("action");
-        });
-
-        wsService.on("updateDraft", data => {
-          setInventoryDraftCards(data.draft || []);
-          const playerName = dataPlayers[data.player_id];
-          if (!isCurrentTurn && data.player_id !== idPlayer) {
-            toast.success(`${playerName} drew 1 card from the draft`);
-          }
-        });
-
-        wsService.on("playerDrawCards", data => {
-          const playerName = dataPlayers[data.id_player];
-          if (!isCurrentTurn && data.id_player !== idPlayer) {
-            toast.success(
-              `${playerName} drew ${data.n_cards} card${
-                data.n_cards > 1 ? "s" : ""
-              } from the regular deck`
-            );
-          }
-        });
-
-        wsService.on("playSet", async data => {
-          const playerName = dataPlayers[data.player_id];
-          const targetName = dataPlayers[data.target_player];
-          if (idPlayer !== data.player_id) {
-            toast.success(`${playerName} played a set to ${targetName}`);
-          }
-          try {
-            const secrets = await httpService.getSecretsGame(
-              currentGame.id,
-              idPlayer
-            );
-            setInventorySecrets(secrets);
-          } catch (error) {
-            console.error("Error fetching secrets:", error);
-          }
-        });
-
-        wsService.on("playEvent", async data => {
-          const playerName = dataPlayers[data.id_player];
-          const targetName = dataPlayers[data.target_player];
-          if (idPlayer !== data.player_id) {
-            if (targetName) {
-              toast.success(`${playerName} played a event to ${targetName}`);
-            } else {
-              toast.success(`${playerName} played ${data.name}`);
-            }
-          }
-
-          try {
-            const cards = await cardsByPlayerContext(currentGame.id, idPlayer);
-            setInventoryCards(cards || []);
-          } catch (error) {
-            console.error("Error fetching initial hand:", error);
-          }
-          try {
-            const draftCards = await httpService.getDraftCards(currentGame.id);
-            setInventoryDraftCards(draftCards || []);
-          } catch (error) {
-            console.error("Error fetching draft cards:", error);
-          }
-          try {
-            let lastCard = await httpService.getLastDiscardedCards(
-              currentGame.id,
-              1
-            );
-            setLastCardDiscarded(lastCard ? lastCard[0] : {});
-          } catch (error) {
-            if (error.response?.status === 404) {
-              setLastCardDiscarded(null);
-            } else {
-              console.error("Error drawing from regular deck:", error);
-            }
-          }
-          try {
-            const secrets = await httpService.getSecretsGame(
-              currentGame.id,
-              idPlayer
-            );
-            setInventorySecrets(secrets);
-          } catch (error) {
-            console.error("Error fetching secrets:", error);
-          }
-        });
-
-        wsService.on("playerCardDiscarded", data => {
-          setLastCardDiscarded(data.last_card);
-        });
-
-        wsService.on("targetPlayerElection", async data => {
-          if (data.target_player == idPlayer) {
-            cardActionsService.callOtherSecrets;
-            try {
-              const result = await cardDetectiveService.callOtherSecrets(
-                data.set_id,
-                data.target_player
-              );
-
-              if (result) {
-                toast.success(`Your secrets was revelead`);
-              } else {
-                toast.info("The player you selected has no secrets available");
-              }
-            } catch (error) {
-              toast.error(error.message || "error");
-            }
-          }
-        });
-
-        wsService.on("gameEnd", data => {
-          navigate(`/game/${gameId}/endGame`, {
-            state: {
-              gameResult: data,
-              currentPlayerId: idPlayer
-            }
-          });
-        });
-
-        wsService.on("disconnect", () => {
-          console.warn("WebSocket disconnected");
-        });
-      } catch (error) {
-        console.error("Failed to initialize:", error);
-      }
-    };
-
-    init();
-    return () => wsService.disconnect();
-  }, [idPlayer, currentGame, httpService, wsService]);
-
-  // Handlers
-  const handleCardClick = id => {
-    setSelectedCardIds(prevSet => {
-      const newSet = new Set(prevSet);
-      newSet.has(id) ? newSet.delete(id) : newSet.add(id);
-      return newSet;
+      });
+      return updated;
     });
-  };
+  }, [isPlayerSocialDisgrace]);
+  UseGameWebSocket({
+    wsService,
+    httpService,
+    currentGame,
+    idPlayer,
+    dataPlayers,
+    setCurrentTurnID,
+    setIsCurrentTurn,
+    setTurnState: setTurnInfo,
+    reloadPlayerData,
+    navigate,
+    gameId,
+    cardDetectiveService,
+    cardActionsService,
+    setIsPlayerSocialDisgrace,
+    setCanNoSoFast,
+    setNsfResetKey
+  });
+
+  const { handlePlayCard } = UseCardPlay({
+    cardActionsService,
+    cardDetectiveService,
+    inventoryCards,
+    selectedCardIds,
+    setInventoryCards,
+    setSelectedCardIds,
+    setTurnState: setTurnInfo,
+    turnState
+  });
+
+  useEffect(() => {
+    const runEffect = async () => {
+      if (!turnInfo || selectionModalState.isOpen) return;
+
+      const state = turnInfo.turn_state;
+      const targetPlayerId = turnInfo.target_player_id;
+      const playersWhoActed = turnInfo.players_who_selected_card || [];
+      const playersWhoVoted = turnInfo.players_who_voted || [];
+
+      const iHaveActed = playersWhoActed.includes(idPlayer);
+      const iHaveVoted = playersWhoVoted.includes(idPlayer);
+
+      try {
+        switch (state) {
+          case "CHOOSING_SECRET":
+            if (targetPlayerId === idPlayer && !iHaveActed) {
+              await cardDetectiveService.callOtherSecrets(
+                turnInfo.set_id,
+                targetPlayerId,
+                turnInfo.set_type
+              );
+            }
+            break;
+
+          case "PASSING_CARDS":
+            if (!iHaveActed) {
+              await cardActionsService.callPassCard(turnInfo.passing_direction);
+            }
+            break;
+
+          case "CHOOSING_SECRET_PYS":
+            if (targetPlayerId === idPlayer) {
+              const res = await cardActionsService.callOtherSecrets(
+                targetPlayerId
+              );
+              if (res) {
+                reloadPlayerData();
+                const namePlayer = dataPlayers?.[targetPlayerId];
+                toast.success(`${namePlayer}'s secret was revealed`);
+              }
+            }
+            break;
+
+          case "VOTING":
+            if (!iHaveVoted) {
+              const res = await cardActionsService.callVotePlayer();
+              if (res) {
+                toast.success(`Vote taken`);
+              }
+            } else {
+              toast.dismissAll();
+
+              toast.loading(`Waiting for other players to vote...`, {
+                duration: Infinity
+              });
+            }
+            break;
+          case "CANCELED_CARD_PENDING":
+            setCanNoSoFast(true);
+            break;
+          default:
+            break;
+        }
+      } catch (error) {
+        toast.error(error?.message || "Error when processing action");
+      }
+    };
+
+    runEffect();
+  }, [turnInfo]);
 
   const handleNextTurn = async () => {
     if (!isCurrentTurn) return;
@@ -337,18 +306,15 @@ const InGame = () => {
     try {
       let cardsInHand = [...inventoryCards];
 
-      if (turnPhase === "action" && cardsInHand.length > 0) {
+      if (turnState === "IDLE" && cardsInHand.length > 0) {
         const randomIndex = Math.floor(Math.random() * cardsInHand.length);
         const randomCard = cardsInHand[randomIndex];
 
         await discardCardsContext(currentGame.id, idPlayer, [randomCard.id]);
-
         cardsInHand.splice(randomIndex, 1);
       }
 
-      // Calculate how many cards are needed to get back to 6
       const cardsToDraw = 6 - cardsInHand.length;
-
       let finalCards = cardsInHand;
 
       if (cardsToDraw > 0) {
@@ -361,12 +327,9 @@ const InGame = () => {
       }
 
       setInventoryCards(finalCards);
-
       await httpService.nextTurnGame(currentGame.id);
 
-      // Reset turn state for the next player
       setSelectedCardIds(new Set());
-      setTurnPhase("action");
     } catch (error) {
       console.error("Error advancing to next turn:", error);
       toast.error("There was an error while attempting to pass the turn");
@@ -379,7 +342,7 @@ const InGame = () => {
       return;
     }
 
-    if (turnPhase === "action" && !hideTurnWarning) {
+    if (turnState === "IDLE" && !hideTurnWarning) {
       setShowConfirmModal(true);
       return;
     }
@@ -410,8 +373,6 @@ const InGame = () => {
       );
       setInventoryCards(prev => [...prev, ...newCards]);
       toast.success(`You drew ${count} card${count > 1 ? "s" : ""}`);
-
-      setTurnPhase("draw");
     } catch (error) {
       if (error.response?.status === 409) {
         toast.error("You can't draw any more cards, limit reached");
@@ -423,7 +384,7 @@ const InGame = () => {
   };
 
   const handleDiscardAction = async () => {
-    if (turnPhase === "draw") {
+    if (turnState === "DRAWING_CARDS") {
       toast.error("You can't discard after drawing");
       return;
     }
@@ -433,13 +394,11 @@ const InGame = () => {
 
     try {
       await discardCardsContext(currentGame.id, idPlayer, cardsToDiscard);
-
       setInventoryCards(prev =>
         prev.filter(card => !cardsToDiscard.includes(card.id))
       );
       setSelectedCardIds(new Set());
       toast.success("Cards discarded.");
-      setTurnPhase("discard");
     } catch (error) {
       console.error("Error trying to discard:", error);
       toast.error("Couldn't discard the cards");
@@ -455,7 +414,6 @@ const InGame = () => {
       );
       setInventoryCards(prev => [...prev, newCard]);
       setInventoryDraftCards(prev => prev.filter(card => card.id !== cardId));
-      setTurnPhase("draw");
     } catch (error) {
       if (error.response?.status === 409) {
         toast.error("You can't draw any more cards, limit reached.");
@@ -465,31 +423,17 @@ const InGame = () => {
     }
   };
 
-  const openZoomModal = (type, cardsToShow, isOwnSecrets = false) => {
-    setZoomModalState({
-      isOpen: true,
-      modalType: type,
-      cards: cardsToShow,
-      viewingOwnSecrets: isOwnSecrets
-    });
-  };
-
-  const closeZoomModal = () => setZoomModalState({ isOpen: false });
-
   const handleShowSecrets = async (targetPlayerId = null) => {
     if (!targetPlayerId || targetPlayerId === idPlayer) {
-      openZoomModal("secrets", inventorySecrets, true);
+      openZoomModal("secrets", inventorySecrets, "", true);
     } else {
       try {
         const secrets = await httpService.getSecretsGame(
           currentGame.id,
           targetPlayerId
         );
-        if (secrets?.length > 0) {
-          openZoomModal("secrets", secrets, false);
-        } else {
-          toast.error("This player has no secrets.");
-        }
+        if (secrets?.length > 0) openZoomModal("secrets", secrets, false);
+        else toast.error("This player has no secrets.");
       } catch (error) {
         toast.error("Could not fetch secrets.");
       }
@@ -506,89 +450,13 @@ const InGame = () => {
         targetPlayerId,
         targetSetId
       );
-      if (sets?.length > 0) {
-        openZoomModal("sets", sets);
-      } else {
-        toast.error("This player has no sets.");
-      }
+      if (sets?.length > 0) openZoomModal("sets", sets);
+      else toast.error("This player has no sets.");
     } catch (error) {
       toast.error("Could not fetch sets.");
     }
   };
 
-  const handlePlayCard = async () => {
-    if (turnPhase == "noAction") {
-      return toast.error("You can't do more than one action");
-    }
-    if (turnPhase == "draw" || turnPhase == "discard") {
-      return toast.error(
-        "You can't take an action after drawing or discarding"
-      );
-    }
-    if (!cardActionsService) return toast.error("The game isn't ready");
-
-    const cardsSelected = Array.from(selectedCardIds);
-
-    const selectedCards = inventoryCards.filter(card =>
-      cardsSelected.includes(card.id)
-    );
-
-    // one card
-    if (selectedCards.length === 1) {
-      const card = selectedCards[0];
-      if (card.type === "EVENT") {
-        try {
-          const result = await cardActionsService.playCardEvent(card);
-          if (result) {
-            if (card.name == "E_LIA") {
-              setInventoryCards(prev => [...prev, result]);
-            }
-
-            setSelectedCardIds(new Set());
-            setInventoryCards(prev => prev.filter(c => c.id !== card.id));
-            setTurnPhase("noAction");
-          } else {
-            toast.error(
-              "The player you selected doesn't meet the requirements to play this card"
-            );
-          }
-        } catch (error) {
-          toast.error("The card could not be played");
-          console.error(error.message);
-        }
-        return;
-      }
-    }
-
-    const allDetectives = selectedCards.every(
-      card => card.type === "DETECTIVE"
-    );
-
-    if (!allDetectives) {
-      return toast.error(
-        "If you play more than one card, they must all be Detective cards"
-      );
-    }
-
-    try {
-      const result = await cardDetectiveService.playSet(selectedCards);
-
-      if (result) {
-        toast.success(`the set was played`);
-        setInventoryCards(prev =>
-          prev.filter(c => !cardsSelected.includes(c.id))
-        );
-        setSelectedCardIds(new Set());
-        setTurnPhase("noAction");
-      } else {
-        toast.error("The player you selected has no secrets available");
-      }
-    } catch (error) {
-      toast.error(error.message || "The cards could not be played");
-    }
-  };
-
-  // Split current player and other players
   const currentPlayer = players ? players[idPlayer] : null;
   const otherPlayers = players
     ? Object.entries(players).filter(([id]) => id !== idPlayer)
@@ -606,15 +474,21 @@ const InGame = () => {
         showConfirmModal={showConfirmModal}
         onHideWarningChange={handleHideWarningChange}
         playerId={idPlayer}
-        turnPhase={turnPhase}
+        turnState={turnState}
         currentTurnID={currentTurnID}
-        isCurrentTurn={isCurrentTurn}
+        isCurrentTurn={isCurrentTurn && turnState !== "CHOOSING_SECRET"}
         selectedCardIds={selectedCardIds}
         currentPlayer={currentPlayer}
         otherPlayers={otherPlayers}
         handleDiscard={handleDiscardAction}
         isDiscardButtonEnabled={isDiscardButtonEnabled}
-        handleCardClick={handleCardClick}
+        handleCardClick={id =>
+          setSelectedCardIds(prev => {
+            const s = new Set(prev);
+            s.has(id) ? s.delete(id) : s.add(id);
+            return s;
+          })
+        }
         handleDrawRegularCard={handleDrawRegularCard}
         handleDrawDraftCard={handleDrawDraftCard}
         lastCardDiscarded={lastCardDiscarded}
@@ -626,11 +500,23 @@ const InGame = () => {
         closeModal={closeZoomModal}
         modalCards={zoomModalState.cards}
         modalType={zoomModalState.modalType}
+        modalTitle={zoomModalState.title}
         viewingOwnSecrets={zoomModalState.viewingOwnSecrets}
         onShowSecrets={handleShowSecrets}
         onShowSets={handleShowSets}
         openModal={openZoomModal}
+        onShowHelp={() => setIsHelpModalOpen(true)}
+        canNoSoFast={canNoSoFast}
+        nsfResetKey={nsfResetKey}
       />
+
+      <TurnTimer
+        remainingTime={initialRemainingTime ?? 0}
+        key={turnInfo?.current_turn}
+        isMyTurn={isCurrentTurn}
+        timerIsPaused={timerIsPaused}
+      />
+
       <SelectionModal
         isOpen={selectionModalState.isOpen}
         title={selectionModalState.title}
@@ -638,6 +524,11 @@ const InGame = () => {
         itemType={selectionModalState.itemType}
         onSelect={selectionModalState.onSelect}
         viewingPlayerId={idPlayer}
+      />
+
+      <HowToPlayModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
       />
     </>
   );

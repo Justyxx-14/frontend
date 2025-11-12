@@ -3,6 +3,7 @@ import { useState } from "react";
 const FormCreateGame = ({ createGame }) => {
   const [formData, setFormData] = useState({
     name: "",
+    password: "",
     min: "",
     max: "",
   });
@@ -32,6 +33,7 @@ const FormCreateGame = ({ createGame }) => {
       ...formData,
       min: formData.min === "" ? null : Number(formData.min),
       max: formData.max === "" ? null : Number(formData.max),
+      password: formData.password === "" ? null : formData.password, 
     };
 
     createGame(payload);
@@ -57,6 +59,17 @@ const FormCreateGame = ({ createGame }) => {
           minLength={5}
           className="w-full p-2 border border-red-700 rounded-md bg-black text-red-100 placeholder-red-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-opacity-70 font-mono"
           required
+        />
+
+        <label htmlFor="password" className="text-red-200">Password</label>
+        <input
+          id="password"
+          type="password"
+          onChange={handleChange}
+          name="password"
+          value={formData.password}
+          placeholder="Enter password (optional)"
+          className="w-full p-2 border border-red-700 rounded-md bg-black text-red-100 placeholder-red-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-opacity-70 font-mono"
         />
 
         <label htmlFor="min" className="text-red-200">Minimum players</label>

@@ -3,6 +3,7 @@ export const createCardActionsService = ({
   gameId,
   playerId,
   otherPlayers,
+  openZoomModal,
   openSelectionModal,
   currentPlayer
 }) => {
@@ -63,6 +64,114 @@ export const createCardActionsService = ({
       });
     });
   };
+  
+  const _promptFordirection = (title, players) => {
+
+    if (players[0].id === players[1].id) {
+      // 2 player: player neighbors are the same person
+      return Promise.resolve({ direction: "right" });
+    }
+
+    return new Promise(resolve => {
+      openSelectionModal({
+        title,
+        items: players,
+        itemType: "direction",
+        onSelect: selectedDirection => resolve(selectedDirection)
+      });
+    });
+  };
+
+  const callPassCard = async direction => {
+    try {
+      const cards = await httpService.getCardsByPlayer(gameId, playerId);
+      const cardId = await _promptForCard(
+        `Select a card to pass to the ${direction}`,
+        cards
+      );
+      return httpService.selectCardForPassing({
+        gameId: gameId,
+        playerId: playerId,
+        cardId: cardId
+      });
+    } catch (error) {
+      console.warn(error);
+      return;
+    }
+  };
+
+  const callVotePlayer = async () => {
+    try {
+      const selectedPlayerId = await _promptForPlayer(
+        "Select a player to vote"
+      );
+      return httpService.votePlayer({
+        gameId: gameId,
+        playerId: playerId,
+        targetPlayerId: selectedPlayerId
+      });
+    } catch (error) {
+      console.warn(error);
+      return;
+    }
+  };
+
+  const callOtherSecrets = async (targetPlayerId, cardType) => {
+    let secrets = await httpService.getSecretsGame(gameId, targetPlayerId);
+    secrets = secrets.filter(secret => !secret.revealed);
+
+    let selectedSecretId;
+
+    if (!secrets || secrets.length === 0) {
+      return null;
+    }
+
+    selectedSecretId = await _promptForSecret(
+      "Select a secret you want to reveal",
+      secrets,
+      targetPlayerId,
+    );
+    return httpService.revealSecretAction({
+      gameId,
+      targetPlayerId,
+      selectedSecretId,
+      cardType
+    });
+  };
+
+  const ECTselection = async playerName => {
+    try {
+      let playerCards = await httpService.getCardsByPlayer(gameId, playerId);
+      const offeredCardId = await _promptForCard(
+        `You must select a card to trade with ${playerName}`,
+        playerCards
+      );
+      return offeredCardId;
+    } catch (error) {
+      console.warn(error);
+      return;
+    }
+  };
+
+  const deviousSent = async (data, playerWhoRecived) => {
+    try {
+      let secrets = await httpService.getSecretsGame(gameId, data.target_player_id);
+      secrets = secrets.filter(secret => !secret.revealed);
+      if (!secrets || secrets.length === 0) {
+        return "Player has not secrets";
+      }
+      const secretRevealId = await _promptForSecret(
+        `Select a ${playerWhoRecived}'s secret you want to see`,
+        secrets,
+        data.target_player_id
+      );
+      const secret = await httpService.viewSecret(secretRevealId);
+      openZoomModal("secrets", [secret], `${playerWhoRecived}'s secret`,true);
+    } catch (error) {
+      console.warn(error);
+      return;
+    }
+  };
 
   const playCardEvent = async card => {
     switch (card.name) {
@@ -76,11 +185,14 @@ export const createCardActionsService = ({
         return await _playEATWOM(card);
       case "E_DME":
       case "E_ETP":
+      case "E_PYS":
         return await _playNormal(card);
-      // case "E_PYS":
-      // case "E_DCF":
-      // case "E_CT":
-      // case "E_NSF":
+      case "E_DCF":
+        return await _playEDCF(card);
+      case "E_CT":
+        return await _playECT(card);
+      case "E_NSF":
+        return await _playENSF(card);
       default:
         console.warn(`The card "${card.description}" don't have an action`);
         return null;
@@ -93,16 +205,13 @@ export const createCardActionsService = ({
     );
 
     try {
-      return httpService.playCardEvent(
-        gameId,
-        card.id,
-        playerId,
-        selectedPlayerId,
-        null,
-        null,
-        null,
-        card.name
-      );
+      return httpService.playCardEvent({
+        gameId: gameId,
+        eventId: card.id,
+        playerId: playerId,
+        eventCode: card.name,
+        targetPlayer: selectedPlayerId
+      });
     } catch (error) {
       return error;
     }
@@ -111,26 +220,20 @@ export const createCardActionsService = ({
   const _playELIA = async card => {
     try {
       let discardCards = await httpService.getLastDiscardedCards(gameId, 5);
-
-      if (discardCards.length === 0) {
-        return null;
-      }
+      if (discardCards.length === 0) return null;
 
       let selectedCardId = await _promptForCard(
         "Select one card to take",
         discardCards
       );
 
-      return httpService.playCardEvent(
-        gameId,
-        card.id,
-        playerId,
-        null,
-        selectedCardId,
-        null,
-        null,
-        card.name
-      );
+      return httpService.playCardEvent({
+        gameId: gameId,
+        eventId: card.id,
+        playerId: playerId,
+        eventCode: card.name,
+        cardId: selectedCardId
+      });
     } catch (error) {
       return error;
     }
@@ -144,10 +247,7 @@ export const createCardActionsService = ({
     try {
       secrets = await httpService.getSecretsGame(gameId, selectedPlayerId);
       secrets = secrets.filter(secret => secret.revealed);
-
-      if (secrets.length === 0) {
-        return null;
-      }
+      if (secrets.length === 0) return null;
     } catch (error) {
       console.warn(error);
     }
@@ -161,16 +261,14 @@ export const createCardActionsService = ({
       "Select a player to give the secret"
     );
     try {
-      return httpService.playCardEvent(
-        gameId,
-        card.id,
-        playerId,
-        targetPlayerId,
-        null,
-        selectedSecretId,
-        null,
-        card.name
-      );
+      return httpService.playCardEvent({
+        gameId: gameId,
+        eventId: card.id,
+        playerId: playerId,
+        eventCode: card.name,
+        targetPlayer: targetPlayerId,
+        secretId: selectedSecretId
+      });
     } catch (error) {
       console.warn(error);
     }
@@ -184,23 +282,112 @@ export const createCardActionsService = ({
         )
       );
       const sets = setsResponses.flat();
+      if (sets.length === 0) return null;
 
-      if (sets.length === 0) {
-        return null;
+      let seletedSetId = await _promptForSets("Select one set", sets);
+      const targetPlayerId = await _promptForPlayer(
+        "select a player to play the set"
+      );
+
+      const selectedSet = sets.find(s => s.id === seletedSetId);
+      let secrets = null;
+      let selectedSecretId = null;
+
+      if (["HP", "MM", "PP"].includes(selectedSet.type)) {
+        secrets = await httpService.getSecretsGame(gameId, targetPlayerId);
+        secrets = secrets.filter(secret => !secret.revealed);
+        if (secrets.length === 0) return null;
+
+        selectedSecretId = await _promptForSecret(
+          "Select a secret you want to reveal",
+          secrets,
+          targetPlayerId
+        );
       }
 
-      let seletedSetId = await _promptForSets("select one set", sets);
+      return httpService.playCardEvent({
+        gameId: gameId,
+        eventId: card.id,
+        playerId: playerId,
+        eventCode: card.name,
+        targetPlayer: targetPlayerId,
+        secretId: selectedSecretId,
+        setId: seletedSetId
+      });
+    } catch (error) {
+      console.warn(error);
+    }
+  };
 
-      return httpService.playCardEvent(
+  const _playEDCF = async card => {
+    try {
+      let playerNeighbors = await httpService.getPlayerNeighbors(
         gameId,
-        card.id,
-        playerId,
-        null,
-        null,
-        null,
-        seletedSetId,
-        card.name
+        playerId
       );
+
+      let selectedInfo = await _promptFordirection(
+        "Select direction to pass a card",
+        [playerNeighbors.previous_player, playerNeighbors.next_player]
+      );
+
+      try {
+        return httpService.playCardEvent({
+          gameId: gameId,
+          eventId: card.id,
+          playerId: playerId,
+          eventCode: card.name,
+          direction: selectedInfo.direction
+        });
+      } catch (error) {
+        console.warn(error);
+        return;
+      }
+    } catch (error) {
+      console.warn(error);
+      return;
+    }
+  };
+
+  const _playECT = async card => {
+    try {
+      let playerCards = await httpService.getCardsByPlayer(gameId, playerId);
+      playerCards = playerCards.filter(
+        card => !(card.description === "Card Trade")
+      );
+      const targetPlayerId = await _promptForPlayer("Select a player to trade");
+
+      const offeredCardId = await _promptForCard(
+        "Select the card you want to trade",
+        playerCards
+      );
+      try {
+        let result = await httpService.playCardEvent({
+          gameId: gameId,
+          eventId: card.id,
+          playerId: playerId,
+          eventCode: card.name,
+          targetPlayer: targetPlayerId,
+          offeredCardId: offeredCardId
+        });
+        return result;
+      } catch (error) {
+        console.warn(error);
+        return;
+      }
+    } catch (error) {
+      console.warn(error);
+      return;
+    }
+  };
+
+  const _playENSF = async card => {
+    try {
+      return httpService.playCardNSF({
+        gameId: gameId,
+        eventId: card.id,
+        playerId: playerId
+      });
     } catch (error) {
       console.warn(error);
     }
@@ -208,22 +395,23 @@ export const createCardActionsService = ({
 
   const _playNormal = async card => {
     try {
-      return httpService.playCardEvent(
-        gameId,
-        card.id,
-        playerId,
-        null,
-        null,
-        null,
-        null,
-        card.name
-      );
+      return httpService.playCardEvent({
+        gameId: gameId,
+        eventId: card.id,
+        playerId: playerId,
+        eventCode: card.name
+      });
     } catch (error) {
       console.warn(error);
     }
   };
 
   return {
-    playCardEvent
+    playCardEvent,
+    callPassCard,
+    callVotePlayer,
+    callOtherSecrets,
+    ECTselection,
+    deviousSent
   };
 };

@@ -2,11 +2,9 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import CardZoomModal from "./CardZoomModal";
 
-// Mock framer-motion to simplify testing by removing animations
 vi.mock("framer-motion", async () => {
   const React = await import("react");
-  // ForwardRef is needed to handle props correctly in functional components
-  const forwardRef = (Component) =>
+  const forwardRef = Component =>
     React.forwardRef(({ children, ...props }, ref) => (
       <Component {...props} ref={ref}>
         {children}
@@ -18,7 +16,8 @@ vi.mock("framer-motion", async () => {
     motion: {
       div: forwardRef("div"),
       img: forwardRef("img"),
-    },
+      h2: forwardRef("h2")
+    }
   };
 });
 
@@ -26,7 +25,6 @@ describe("CardZoomModal", () => {
   const mockOnClose = vi.fn();
 
   beforeEach(() => {
-    // Clear mock history before each test
     mockOnClose.mockClear();
   });
 
@@ -53,7 +51,7 @@ describe("CardZoomModal", () => {
   });
 
   it("renders own secrets ('secrets' type) with their front visible", () => {
-    const ownSecrets = [{ name: "My Secret", revealed: false }]; // Even if not revealed, should show
+    const ownSecrets = [{ name: "My Secret", revealed: false }];
     render(
       <CardZoomModal
         isOpen={true}
@@ -70,7 +68,7 @@ describe("CardZoomModal", () => {
   it("renders other player's secrets, showing revealed and hiding non-revealed cards", () => {
     const otherPlayerSecrets = [
       { name: "Revealed Secret", revealed: true },
-      { name: "Hidden Secret", revealed: false },
+      { name: "Hidden Secret", revealed: false }
     ];
     render(
       <CardZoomModal
@@ -90,7 +88,7 @@ describe("CardZoomModal", () => {
   it("renders set cards with correct image src and alt", () => {
     const setCards = [
       { id: "1", type: "MM", game_id: "123", owner_player_id: "123p" },
-      { id: "2", type: "MS", game_id: "123", owner_player_id: "456p" },
+      { id: "2", type: "MS", game_id: "123", owner_player_id: "456p" }
     ];
 
     render(
@@ -102,7 +100,6 @@ describe("CardZoomModal", () => {
       />
     );
 
-    // Verify that images are rendered with the expected src
     const mmCard = screen.getByAltText("MM");
     const msCard = screen.getByAltText("MS");
 
@@ -114,7 +111,10 @@ describe("CardZoomModal", () => {
   });
 
   it("does not render secret or card back images when modalType is 'sets'", () => {
-    const sets = [{ id: "3", type: "TB" }, { id: "4", type: "TUB" }];
+    const sets = [
+      { id: "3", type: "TB" },
+      { id: "4", type: "TUB" }
+    ];
 
     render(
       <CardZoomModal
@@ -125,10 +125,8 @@ describe("CardZoomModal", () => {
       />
     );
 
-    // Should not display images with alt "Secret card"
     expect(screen.queryByAltText("Secret card")).not.toBeInTheDocument();
 
-    // Only images with alt equal to the type should exist
     expect(screen.getByAltText("TB")).toBeInTheDocument();
     expect(screen.getByAltText("TUB")).toBeInTheDocument();
   });

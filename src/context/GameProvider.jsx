@@ -1,11 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { GameContext } from "./gameContext";
-import { createHttpService } from "@services/HttpService";
+import { createHttpService } from "@/services/HttpService";
 
 const httpService = createHttpService();
 
 export const GameProvider = ({ children }) => {
-  // initial states from sessionStorage
   const [user, setUser] = useState(() => {
     const raw = sessionStorage.getItem("user");
     return raw ? JSON.parse(raw) : null;
@@ -25,56 +24,80 @@ export const GameProvider = ({ children }) => {
     return saved ? JSON.parse(saved) : {};
   });
 
-  const prevGameId = useRef(currentGame?.id ?? null);
-
-  // Persistencia en sessionStorage
   useEffect(() => {
     if (user) sessionStorage.setItem("user", JSON.stringify(user));
+    else sessionStorage.removeItem("user");
   }, [user]);
 
   useEffect(() => {
     if (currentGame) {
       sessionStorage.setItem("currentGame", JSON.stringify(currentGame));
+    } else {
+      sessionStorage.removeItem("currentGame");
     }
-  }, [currentGame]);
-
-  useEffect(() => {
-    if (
-      prevGameId.current &&
-      currentGame?.id &&
-      currentGame.id !== prevGameId.current
-    ) {
-      setDataPlayers({});
-    }
-    prevGameId.current = currentGame?.id ?? null;
   }, [currentGame]);
 
   useEffect(() => {
     if (idPlayer) sessionStorage.setItem("idPlayer", idPlayer);
+    else sessionStorage.removeItem("idPlayer");
   }, [idPlayer]);
 
   useEffect(() => {
-    if (dataPlayers)
+    if (dataPlayers && Object.keys(dataPlayers).length > 0) {
       sessionStorage.setItem("dataPlayers", JSON.stringify(dataPlayers));
+    } else {
+      sessionStorage.removeItem("dataPlayers");
+    }
   }, [dataPlayers]);
 
-  const joinGameContext = async (game, user) => {
+  const joinGameContext = async (game, user, password = null) => {
     try {
-      const responseJoin = await httpService.joinGame(game.id, user);
-      const response = await httpService.getGameInfo(game.id);
-      setCurrentGame(response);
-      for (const playerId of response.players_ids) {
-        const infoPlayer = await httpService.getPlayers(playerId);
-        setDataPlayers(prev => ({
-          ...prev,
-          [playerId]: infoPlayer.name
-        }));
-      }
+      console.log("🔍 GameProvider - joinGameContext called with:", { 
+        gameId: game.id, 
+        userName: user.name,
+        password 
+      });
+
+      const responseJoin = await httpService.joinGame(game.id, user, password);
+      const responseGameInfo = await httpService.getGameInfo(game.id);
+      setCurrentGame(responseGameInfo);
+
+      const playerPromises = responseGameInfo.players_ids.map(playerId =>
+        httpService.getPlayers(playerId)
+      );
+
+      const results = await Promise.allSettled(playerPromises);
+
+      const playersMap = {};
+      results.forEach((result, index) => {
+        const playerId = responseGameInfo.players_ids[index];
+
+        if (
+          result.status === "fulfilled" &&
+          result.value &&
+          result.value.name
+        ) {
+          playersMap[playerId] = result.value.name;
+        } else {
+          playersMap[playerId] = "Unknown";
+          if (result.status === "rejected") {
+            console.error(
+              `Failed to fetch info for player ${playerId}:`,
+              result.reason
+            );
+          }
+        }
+      });
+
+      setDataPlayers(playersMap);
 
       setIdPlayer(responseJoin.player_id);
-      return response;
+      return responseGameInfo;
     } catch (error) {
       console.error("Failed to join game:", error);
+      setDataPlayers({});
+      setCurrentGame(null);
+      setIdPlayer(null);
       throw error;
     }
   };
@@ -84,24 +107,28 @@ export const GameProvider = ({ children }) => {
       sessionStorage.clear();
       const response = await httpService.createGame(game, user);
       setCurrentGame(response);
-      setDataPlayers(prev => ({
-        ...prev,
-        [response.host_id]: user.name
-      }));
+      setDataPlayers({ [response.host_id]: user.name });
       setIdPlayer(response.host_id);
       return response;
     } catch (error) {
       console.error("Failed to create game:", error);
+      setDataPlayers({});
+      setCurrentGame(null);
+      setIdPlayer(null);
       throw error;
     }
   };
 
-  const discardCardsContext = async (gameId, playerId, cardId) => {
+  const discardCardsContext = async (gameId, playerId, cardIds) => {
     try {
-      const response = await httpService.discardCards(gameId, playerId, cardId);
+      const response = await httpService.discardCards(
+        gameId,
+        playerId,
+        cardIds
+      );
       return response;
     } catch (error) {
-      console.error("Failed to move card:", error);
+      console.error("Failed to discard card(s):", error);
       throw error;
     }
   };
@@ -133,6 +160,7 @@ export const GameProvider = ({ children }) => {
         user,
         setUser,
         currentGame,
+        setCurrentGame,
         dataPlayers,
         setDataPlayers,
         joinGameContext,

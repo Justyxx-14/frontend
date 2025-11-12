@@ -51,6 +51,10 @@ const createHttpService = () => {
     return request(`/players/${gameID}`, { method: "GET" });
   };
 
+  const getPlayerById = async playerId => {
+    return request(`/players/${playerId}`, { method: "GET" });
+  };
+
   const getCardsByPlayer = async (gameId, playerId) => {
     const url = `/cards?game_id=${gameId}&owner=PLAYER&player_id=${playerId}`;
     return await request(url, {
@@ -58,16 +62,29 @@ const createHttpService = () => {
     });
   };
 
-  const joinGame = async (gameId, user) => {
-    return await request(`/games/${gameId}/players`, {
+  const joinGame = async (gameId, user, password = null) => {
+    const requestBody = {
+      name: user.name,
+      birthday: user.birthday
+    };
+
+    let url = `/games/${gameId}/players`;
+
+    // Agregar password como query parameter
+    if (password !== null) {
+      url += `?password=${encodeURIComponent(password)}`;
+    }
+
+    return await request(url, {
       method: "POST",
-      body: JSON.stringify({ name: user.name, birthday: user.birthday })
+      body: JSON.stringify(requestBody)
     });
   };
 
   const createGame = async (game, user) => {
     const body = {
       name: game.name,
+      password: game.password,
       host_name: user.name,
       birthday: user.birthday,
       min_players: game.min,
@@ -149,28 +166,59 @@ const createHttpService = () => {
     });
   };
 
-  const playCardEvent = async (
-    gameId,
-    eventID,
-    playerID,
-    targetPlayer = null,
-    cardId = null,
-    secretId = null,
-    setId = null,
-    eventCode
-  ) => {
+  const playCardEvent = async payload => {
+    const { eventCode, gameId } = payload;
+
+    const body = {
+      player_id: payload.playerId,
+      event_id: payload.eventId,
+      target_player: payload.targetPlayer || null,
+      card_id: payload.cardId || null,
+      secret_id: payload.secretId || null,
+      set_id: payload.setId || null,
+      requested_card_code: payload.requestesCardCode || null,
+      target_card_id: payload.targetCardId || null,
+      offered_card_id: payload.offeredCardId || null,
+      direction: payload.direction || null
+    };
+
     return await request(`/cards/play/${eventCode}/${gameId}`, {
       method: "PUT",
-      body: JSON.stringify({
-        player_id: playerID,
-        event_id: eventID,
-        target_player: targetPlayer,
-        card_id: cardId,
-        secret_id: secretId,
-        set_id: setId
-      })
+      body: JSON.stringify(body)
     });
   };
+
+  const selectCardForPassing = async payload => {
+    const { gameId } = payload;
+
+    const body = {
+      player_id: payload.playerId,
+      card_id: payload.cardId
+    };
+    return await request(`/cards/passing/${gameId}`, {
+      method: "PUT",
+      body: JSON.stringify(body)
+    });
+  };
+
+  const resolveCardTrade = async payload => {
+    const { gameId } = payload;
+    const body = {
+      player_id: payload.playerId,
+      target_card_id: payload.targetCardId,
+      event_card_id: payload.eventId
+    };
+    return await request(`/cards/play/E_CT/${gameId}/selection`, {
+      method: "PUT",
+      body: JSON.stringify(body)
+    });
+  };
+
+  const viewSecret = async (secretId) => {
+    return await request(`/secrets/${secretId}/view`, {
+      method: "GET"
+    });
+  }
 
   const verifySetDetective = async cardIds => {
     const params = new URLSearchParams();
@@ -194,36 +242,130 @@ const createHttpService = () => {
     if (payload.target_secret) {
       body.secret_id = payload.target_secret;
     }
-
     return await request(`/sets/play/${gameId}`, {
       method: "POST",
       body: JSON.stringify(body)
     });
   };
 
-  const setsElectionSecret = async (
-    gameId,
-    setId,
-    playerId,
-    selectedSecretId
-  ) => {
-    return await request(`/sets/election_secret/${gameId}`, {
+  const addDetectiveEffect = async (gameId, cardId, playerId, payload) => {
+    const params = new URLSearchParams({
+      game_id: gameId,
+      player_id: playerId,
+      target_player_id: payload.target_player
+    });
+    if (payload.target_secret) {
+      params.append("secret_id", payload.target_secret);
+    }
+
+    const url = `/sets/${payload.set_id}/cards/${cardId}?${params.toString()}`;
+    return await request(url, { method: "PUT" });
+  };
+
+  const addAriadne = async (gameId, setId, playerId, cardId) => {
+    const params = new URLSearchParams({
+      game_id: gameId,
+      player_id: playerId,
+      card_id: cardId
+    });
+
+    const url = `/sets/ariadne/${setId}?${params.toString()}`;
+    return await request(url, { method: "PUT" });
+  };
+
+  const setsElectionSecret = async (gameId, payload) => {
+    const params = new URLSearchParams();
+    if (payload.cardId) params.append("card_id", payload.cardId);
+
+    const url = `/sets/election_secret/${gameId}?${params.toString()}`;
+    return await request(url, {
       method: "POST",
       body: JSON.stringify({
-        set_id: setId,
-        player_id: playerId,
-        secret_id: selectedSecretId
+        set_id: payload.setId,
+        player_id: payload.targetPlayerId,
+        secret_id: payload.selectedSecretId
       })
     });
   };
 
   const getSets = async (gameId, playerId, setId = null) => {
-    let url = `/sets?game_id=${gameId}&player_id=${playerId}`;
-    if (setId) {
-      url += `&set_id=${setId}`;
-    }
+    const params = new URLSearchParams({
+      game_id: gameId,
+      player_id: playerId
+    });
+    if (setId) params.append("set_id", setId);
+
+    const url = `/sets?${params.toString()}`;
+
+    return await request(url, { method: "GET" });
+  };
+
+  const getPlayerNeighbors = async (gameId, playerId) => {
+    return await request(`/games/${gameId}/neighbors/${playerId}`, {
+      method: "GET"
+    });
+  };
+
+  const leaveGame = async (gameId, playerId) => {
+    return await request(`/games/${gameId}/players/${playerId}`, {
+      method: "DELETE"
+    });
+  };
+
+  const getSocialDisgraceByGame = async gameId => {
+    let url = `/secrets/social_disgrace?game_id=${gameId}`;
     return await request(url, {
       method: "GET"
+    });
+  };
+
+  const votePlayer = async payload => {
+    const { gameId } = payload;
+
+    const body = {
+      player_id: payload.playerId,
+      target_player_id: payload.targetPlayerId
+    };
+
+    return await request(`/cards/vote/${gameId}`, {
+      method: "PUT",
+      body: JSON.stringify(body)
+    });
+  };
+
+  const revealSecretAction = async payload => {
+    const { gameId } = payload;
+    const { cardType } = payload;
+
+    const body = {
+      player_id: payload.targetPlayerId,
+      secret_id: payload.selectedSecretId
+    };
+    switch (cardType){
+      case "P_Y_S":
+        return await request(`/secrets/reveal_for_pys/${gameId}`, {
+          method: "PUT",
+          body: JSON.stringify(body)
+        });
+      case "S_F_P":
+        return await request(`/secrets/reveal_for_sfp/${gameId}`, {
+          method: "PUT",
+          body: JSON.stringify(body)
+        });
+    }
+  };
+
+  const playCardNSF = async payload => {
+    const { gameId } = payload;
+
+    const body = {
+      player_id: payload.playerId,
+      card_id: payload.eventId
+    };
+
+    return await request(`/cards/play-no-so-fast/${gameId}`, {
+      method: "PUT",
+      body: JSON.stringify(body)
     });
   };
 
@@ -232,6 +374,7 @@ const createHttpService = () => {
     joinGame,
     getGames,
     getPlayers,
+    getPlayerById,
     getGameInfo,
     startGame,
     getCardsByPlayer,
@@ -246,8 +389,19 @@ const createHttpService = () => {
     getLastDiscardedCards,
     playCardEvent,
     verifySetDetective,
+    viewSecret,
     playDetectiveEffect,
-    setsElectionSecret
+    addDetectiveEffect,
+    addAriadne,
+    setsElectionSecret,
+    selectCardForPassing,
+    getPlayerNeighbors,
+    votePlayer,
+    revealSecretAction,
+    resolveCardTrade,
+    leaveGame,
+    getSocialDisgraceByGame,
+    playCardNSF
   };
 };
 

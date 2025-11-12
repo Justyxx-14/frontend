@@ -11,12 +11,23 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
       "@components": path.resolve(__dirname, "./src/components"),
       "@context": path.resolve(__dirname, "./src/context"),
-      "@services": path.resolve(__dirname, "./src/services"),
-    },
+      "@services": path.resolve(__dirname, "./src/services")
+    }
   },
   test: {
     globals: true,
     environment: "jsdom",
     setupFiles: "./setupTest.js",
-  },
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+      "@components": path.resolve(__dirname, "./src/components"),
+      "@context": path.resolve(__dirname, "./src/context"),
+      "@services": path.resolve(__dirname, "./src/services")
+    },
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html"],
+      reportsDirectory: "./coverage"
+    }
+  }
 });

@@ -71,6 +71,28 @@ const SetItem = ({ set, onClick }) => {
   );
 };
 
+const DirectionItem = ({ player, onClick, isFirst }) => {
+  const direction = isFirst ? "left" : "right";
+
+  return (
+    <motion.div
+      onClick={() => onClick({ id: player.id, direction: direction })}
+      whileHover={{ y: -10, scale: 1.05 }}
+      className="flex flex-col items-center text-center text-amber-100 justify-center align-middle cursor-pointer"
+    >
+      <img
+        src={`/arrow.webp`}
+        alt={player.name}
+        className={`rounded-2xl shadow-2xl w-[200px] sm:w-[240px] md:w-[260px] lg:w-[300px] transition-transform duration-200 ${
+          isFirst ? "scale-x-[-1]" : ""
+        }`}
+        draggable={false}
+      />
+      <p className="mt-2 text-lg font-semibold">{player.name}</p>
+    </motion.div>
+  );
+};
+
 const SecretItem = ({ secret, onClick, viewingPlayerId }) => {
   {
     const isMySecret = viewingPlayerId === secret.owner_player_id;
@@ -98,7 +120,7 @@ const SelectionModal = ({
   isOpen,
   title,
   items = [],
-  itemType, // 'card' | 'player' | 'secret' | 'set'
+  itemType, // 'card' | 'player' | 'secret' | 'set' | direction
   onSelect,
   viewingPlayerId
 }) => {
@@ -130,7 +152,7 @@ const SelectionModal = ({
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.3, type: "spring", stiffness: 150 }}
           >
-            {items.map(item => {
+            {items.map((item, i) => {
               if (itemType === "card") {
                 return (
                   <CardItem
@@ -166,6 +188,16 @@ const SelectionModal = ({
                     set={item}
                     onClick={() => onSelect(item.id)}
                     viewingPlayerId={viewingPlayerId}
+                  />
+                );
+              }
+              if (itemType === "direction") {
+                return (
+                  <DirectionItem
+                    key={i}
+                    player={item}
+                    onClick={onSelect}
+                    isFirst={i == 0}
                   />
                 );
               }

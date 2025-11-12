@@ -1,53 +1,65 @@
-// App.test.jsx
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { BrowserRouter } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
+import React from "react";
 
-import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { describe, it, expect } from "vitest";
-import { Routes, Route } from "react-router-dom";
+const { mockRender, mockCreateRoot } = vi.hoisted(() => {
+  const renderFn = vi.fn();
+  return {
+    mockRender: renderFn,
+    mockCreateRoot: vi.fn(() => ({ render: renderFn }))
+  };
+});
 
-// import App from './App';
-const App = () => {
-  return (
-    <Routes>
-      <Route path="/" element={<Menu />} />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
-  );
-};
+vi.mock("react-dom/client", () => ({
+  createRoot: mockCreateRoot
+}));
 
-const NotFound = () => <h1>Página no encontrada</h1>;
-const Menu = () => <h2>Partidas Disponibles</h2>;
+vi.mock("./context/GameProvider.jsx", () => ({
+  GameProvider: ({ children }) => (
+    <div data-testid="game-provider">{children}</div>
+  )
+}));
+vi.mock("./containers/Menu/Menu", () => ({
+  default: () => <div data-testid="menu-page">Menu</div>
+}));
+vi.mock("./containers/Lobby/Lobby", () => ({
+  default: () => <div data-testid="lobby-page">Lobby</div>
+}));
+vi.mock("./containers/InGame/InGame", () => ({
+  default: () => <div data-testid="ingame-page">InGame</div>
+}));
+vi.mock("./containers/endGame/EndGame", () => ({
+  default: () => <div data-testid="endgame-page">EndGame</div>
+}));
+vi.mock("./pages/NotFound", () => ({
+  default: () => <div data-testid="notfound-page">NotFound</div>
+}));
+vi.mock("react-hot-toast", () => ({
+  Toaster: () => <div data-testid="toaster">Toaster</div>
+}));
 
-describe("Test de Ruteo Principal", () => {
-  it('debe renderizar la página principal (Menu) en la ruta "/"', () => {
-    // 1. Renderizamos la app en una ruta específica usando MemoryRouter
-    render(
-      <MemoryRouter initialEntries={["/"]}>
-        <App />
-      </MemoryRouter>
-    );
-
-    // 2. Buscamos un texto que solo exista en el componente Menu
-    const menuTitle = screen.getByText(/Partidas Disponibles/i);
-
-    // 3. Verificamos que el texto esté en el documento
-    expect(menuTitle).toBeInTheDocument();
+describe("main.jsx", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    document.body.innerHTML = '<div id="root"></div>';
   });
 
-  it("debe renderizar la página NotFound para una ruta que no existe", () => {
-    const badRoute = "/una/ruta/que/no/existe";
+  it("should create root and render the main application structure", async () => {
+    await import("./main.jsx");
 
-    // 1. Renderizamos la app en una ruta inválida
-    render(
-      <MemoryRouter initialEntries={[badRoute]}>
-        <App />
-      </MemoryRouter>
+    expect(mockCreateRoot).toHaveBeenCalledTimes(1);
+    expect(mockCreateRoot).toHaveBeenCalledWith(
+      document.getElementById("root")
     );
 
-    // 2. Buscamos un texto que solo exista en el componente NotFound
-    const notFoundText = screen.getByText(/Página no encontrada/i);
+    expect(mockRender).toHaveBeenCalledTimes(1);
 
-    // 3. Verificamos que el componente NotFound se muestre
-    expect(notFoundText).toBeInTheDocument();
+    const renderedContent = mockRender.mock.calls[0][0];
+    expect(renderedContent.type).toBe(React.Fragment);
+    const children = renderedContent.props.children;
+    const childArray = Array.isArray(children) ? children : [children];
+    expect(childArray.some(c => c && c.type === BrowserRouter)).toBe(true);
+    expect(childArray.some(c => c && c.type === Toaster)).toBe(true);
   });
 });

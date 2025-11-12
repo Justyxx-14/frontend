@@ -1,6 +1,6 @@
 import { data } from "react-router-dom";
 
-const LobbyLayout = ({ currentGame, dataPlayers, idPlayer, startGame }) => {
+const LobbyLayout = ({ currentGame, dataPlayers, idPlayer, startGame, leaveGame }) => {
   return (
     <>
       <div
@@ -29,7 +29,25 @@ const LobbyLayout = ({ currentGame, dataPlayers, idPlayer, startGame }) => {
                        }}>
           Lobby: {currentGame?.name}
         </h1>
-
+        <button
+          type="button"
+          onClick={leaveGame} 
+          className="
+            absolute bottom-25 right-23 z-20
+            px-15 py-4
+            rounded-lg
+            border border-red-900
+            bg-gradient-to-b from-[#3b0a0a] to-[#1a0000]
+            text-red-200 font-creepster tracking-wider
+            [text-shadow:0_0_10px_rgba(255,180,200,0.7)]
+            shadow-[0_0_15px_rgba(139,0,0,0.7)]
+            transition-all duration-300
+            hover:brightness-140
+            hover:shadow-[0_0_25px_rgba(220,38,38,0.9)]
+          "
+        >
+          Leave Game
+        </button>
         <div
           className="absolute top-[5%] inset-0 flex items-center justify-center"
         >

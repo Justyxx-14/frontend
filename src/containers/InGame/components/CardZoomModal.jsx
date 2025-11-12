@@ -7,6 +7,7 @@ export default function CardZoomModal({
   isOpen,
   onClose,
   cards = [],
+  title = "",
   viewingOwnSecrets = false
 }) {
   useEffect(() => {
@@ -39,6 +40,16 @@ export default function CardZoomModal({
             exit={{ scale: 0.95, opacity: 0 }}
             transition={{ type: "spring", stiffness: 200, damping: 20 }}
           >
+            {/* Title */}
+            <motion.h2
+              className="text-3xl font-bold text-white mb-8 text-center"
+              initial={{ y: -20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.2 }}
+            >
+              {title}
+            </motion.h2>
+
             {/* Close button */}
             <button
               onClick={onClose}
@@ -51,7 +62,7 @@ export default function CardZoomModal({
             <div
               className={`grid gap-12 justify-center items-center ${
                 cards.length <= 3
-                  ? "grid-cols-1 sm:grid-cols-2 md:grid-cols-3"
+                  ? `grid-cols-${cards.length}`
                   : cards.length <= 6
                   ? "grid-cols-3"
                   : "grid-cols-6"

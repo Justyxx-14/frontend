@@ -1,12 +1,47 @@
-# React + Vite
+# React + Vite Project Setup and Testing Guide
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Setup
 
-Currently, two official plugins are available:
+### Install Dependencies
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+In the project directory, run:
 
-## Expanding the ESLint configuration
+```
+npm install
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+This command installs all required packages defined in `package.json`.
+
+## Development
+
+### Run the Development Server
+
+To start the application with hot-reloading, run:
+
+```
+npm run dev
+```
+
+The application will typically run at `http://localhost:5173`, unless that port is already in use.
+
+## Testing
+
+### Run Tests in Watch Mode with UI
+
+Execute the following command to run tests using Vitest in watch mode with UI:
+
+```
+npm run test:v8:watch
+```
+
+This command uses the V8 coverage provider and enables re-running tests when files change.
+
+### Run Tests with Coverage Report
+
+To run all tests once and generate a coverage report, run:
+
+```
+npm test -- --coverage
+```
+
+The coverage report is typically generated inside a `coverage/` directory.

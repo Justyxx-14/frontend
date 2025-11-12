@@ -6,12 +6,12 @@ import { GameProvider } from "./context/GameProvider.jsx";
 
 import "./index.css";
 
-import Menu from "./containers/Menu/Menu";
-import Lobby from "./containers/Lobby/Lobby";
-import NotFound from "./pages/NotFound";
-import InGame from "./containers/InGame/InGame";
+import Menu from "./containers/Menu/Menu.jsx";
+import Lobby from "./containers/Lobby/Lobby.jsx";
+import NotFound from "./pages/NotFound.jsx";
+import InGame from "./containers/InGame/InGame.jsx";
 import { Toaster } from "react-hot-toast";
-import EndGame from "./containers/endGame/EndGame";
+import EndGame from "./containers/endGame/EndGame.jsx";
 
 createRoot(document.getElementById("root")).render(
   <>

@@ -3,17 +3,20 @@ const createWSService = () => {
   let isConnected = false;
   let isConnecting = false;
   let shouldReconnect = true;
+  let lastGameId = null;
   const wsUrl = import.meta.env.VITE_WS_URI || "ws://localhost:8000/ws";
   const listeners = {};
 
   const emit = (event, data) => {
     if (listeners[event]) {
-      listeners[event].forEach((callback) => callback(data));
+      listeners[event].forEach(callback => callback(data));
     }
   };
 
-  const connect = (gameId) => {
-    const url = gameId ? `${wsUrl}/${gameId}` : wsUrl;
+  const connect = gameId => {
+    if (gameId) lastGameId = gameId;
+    const url = lastGameId ? `${wsUrl}/${lastGameId}` : wsUrl;
+
     try {
       ws = new WebSocket(url);
 
@@ -24,15 +27,13 @@ const createWSService = () => {
         emit("open");
       };
 
-      ws.onmessage = (event) => {
+      ws.onmessage = event => {
         try {
           console.log("WS message received:", event.data);
           const message = JSON.parse(event.data);
           const { type, data } = message;
-          console.log("Parsed type:", type, "data:", data);
-
           if (listeners[type]) {
-            listeners[type].forEach((callback) => callback(data));
+            listeners[type].forEach(callback => callback(data));
           }
         } catch (err) {
           console.error("Error parsing WebSocket message:", err);
@@ -48,7 +49,7 @@ const createWSService = () => {
         }
       };
 
-      ws.onerror = (error) => {
+      ws.onerror = error => {
         isConnected = false;
         console.error("WebSocket error:", error);
       };
@@ -59,15 +60,13 @@ const createWSService = () => {
   };
 
   const on = (event, callback) => {
-    if (!listeners[event]) {
-      listeners[event] = [];
-    }
+    if (!listeners[event]) listeners[event] = [];
     listeners[event].push(callback);
   };
 
   const off = (event, callback) => {
     if (listeners[event]) {
-      listeners[event] = listeners[event].filter((cb) => cb !== callback);
+      listeners[event] = listeners[event].filter(cb => cb !== callback);
     }
   };
 
@@ -83,7 +82,7 @@ const createWSService = () => {
     connect,
     on,
     off,
-    disconnect,
+    disconnect
   };
 };
 

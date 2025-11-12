@@ -114,7 +114,7 @@ const EndGame = () => {
 
         {gameResult.reason === "SECRETS_REVEALED" && (
           <motion.img
-            src="/cards/MURESCAPE.webp"
+            src="/cards/SOCIALDISGRACE.webp"
             alt="Secrets revealed"
             className="rounded-2xl shadow-2xl w-20 md:w-30 select-none"
             initial={{ opacity: 0, y: -20 }}

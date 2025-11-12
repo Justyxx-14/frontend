@@ -1,7 +1,8 @@
 import { useRef } from "react";
-
 import { useGame } from "@/context/useGame";
 import MenuLayout from "./components/MenuLayout";
+import HowToPlayModal from "../components/HowToPlay";
+
 import { useEffect, useState } from "react";
 import { createWSService } from "@/services/WSService";
 import { createHttpService } from "@/services/HttpService";
@@ -16,6 +17,8 @@ const Menu = () => {
   const [wsService] = useState(() => createWSService());
   const [httpService] = useState(() => createHttpService());
 
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+
   const formRef = useRef(null);
 
   useEffect(() => {
@@ -24,13 +27,16 @@ const Menu = () => {
         setLoading(true);
 
         // Load games
-        const gamesData = await httpService.getGames().catch(() => []);
+        const gamesData = await httpService.getGames();
 
-        gamesData.forEach((game) => {
-          game.countPlayers = game.players_ids.length;
-        });
+        // PROCESAR JUEGOS - AGREGAR hasPassword
+        const processedGames = gamesData.map(game => ({
+          ...game,
+          countPlayers: game.players_ids.length,
+          hasPassword: !!game.password  // ← Esto es lo nuevo
+        }));
 
-        setGames(gamesData);
+        setGames(processedGames);  // ← Usar processedGames en lugar de gamesData
 
         // Initialize WebSocket
         setTimeout(() => {
@@ -43,18 +49,26 @@ const Menu = () => {
           }
         }, 500);
 
-        wsService.on("gameAdd", (newGame) => {
-          newGame = { ...newGame, countPlayers: newGame.players_ids.length };
-          setGames((prev) => {
-            const exists = prev.some((game) => game.id === newGame.id);
-            return exists ? prev : [...prev, newGame];
+        wsService.on("gameAdd", newGame => {
+          const processedGame = { 
+            ...newGame, 
+            countPlayers: newGame.players_ids.length,
+            hasPassword:
+             newGame.hasPassword !== undefined
+              ? newGame.hasPassword
+              : !!newGame.password
+          };
+
+          setGames(prev => {
+            const exists = prev.some(game => game.id === processedGame.id);
+            return exists ? prev : [...prev, processedGame];
           });
         });
 
-        wsService.on("joinPlayerToGame", (data) => {
+        wsService.on("joinPlayerToGame", data => {
           const { id, players_ids } = data;
-          setGames((prev) =>
-            prev.map((game) =>
+          setGames(prev =>
+            prev.map(game =>
               game.id === id
                 ? { ...game, countPlayers: players_ids.length }
                 : game
@@ -62,9 +76,9 @@ const Menu = () => {
           );
         });
 
-        wsService.on("gameUnavailable", (data) => {
+        wsService.on("gameUnavailable", data => {
           const { id } = data;
-          setGames((prev) => prev.filter((game) => game.id !== id));
+          setGames(prev => prev.filter(game => game.id !== id));
         });
       } catch (error) {
         console.error("Failed to initialize app:", error);
@@ -75,13 +89,12 @@ const Menu = () => {
 
     init();
 
-    // Cleanup WebSocket on unmount
     return () => {
       wsService.disconnect();
     };
-  }, [httpService, wsService]);
+  }, []);
 
-  const createGame = async (game) => {
+  const createGame = async game => {
     if (!user?.name || !user?.birthday) {
       formRef.current?.querySelector("input")?.focus();
       alert("Debes completar el registro antes de unirte a una partida");
@@ -97,7 +110,7 @@ const Menu = () => {
     }
   };
 
-  const joinGame = async (game) => {
+  const joinGame = async (game, password = null) => {
     if (!user?.name || !user?.birthday) {
       formRef.current?.querySelector("input")?.focus();
       alert("Debes completar el registro antes de unirte a una partida");
@@ -105,13 +118,31 @@ const Menu = () => {
     }
 
     try {
-      const joined = await joinGameContext(game, user);
+      const joined = await joinGameContext(game, user, password);
       const gameId = joined?.id || joined?.game_id;
-      if (gameId) navigate(`/lobby/${gameId}`);
+      if (gameId) {
+        navigate(`/lobby/${gameId}`);
+        return true; // Éxito
+      }
     } catch (error) {
-      console.error("Error uniéndote a la partida:", error);
+      console.error("❌ Error uniéndote a la partida:", error);
+
+      const errorDetail = error.response?.data?.detail || error.message || "";
+      console.log("🔍 Error detail:", errorDetail);
+
+      // Lanzar el error para que el modal lo maneje
+      throw error;
     }
   };
+
+  const validateForm = () => {
+  if (!user?.name || !user?.birthday) {
+    formRef.current?.querySelector("input")?.focus();
+    alert("Debes completar el registro antes de unirte a una partida");
+    return false;
+  }
+  return true;
+};
 
   if (loading) {
     return (
@@ -125,12 +156,20 @@ const Menu = () => {
   }
 
   return (
+    <>
     <MenuLayout
       games={games}
       formRef={formRef}
       joinGame={joinGame}
       createGame={createGame}
+      validateForm={validateForm}
+      onShowHelp={() => setIsHelpModalOpen(true)}
     />
+    <HowToPlayModal
+      isOpen={isHelpModalOpen}
+      onClose={() => setIsHelpModalOpen(false)}
+    />
+    </>
   );
 };
 
